@@ -1,0 +1,12 @@
+#!/bin/bash
+
+EXPECTED_ARGS=1
+E_BADARGS=65
+
+if [ $# -ne $EXPECTED_ARGS ]
+    then
+        echo "Usage: runparallel <numprocs> (hostfile)"
+        exit $E_BADARGS
+        fi
+make 
+mpirun -np $1 ./bin/pingpong $1
