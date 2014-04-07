@@ -5,7 +5,7 @@ UTIL := util
 BUILDDIR := build
 CFLAGS := -Wall -std=c++0x -g
 LIBS :=  -lm
-TARGET := bin/pingpong
+TARGET := bin/matrix
  
 SRCEXT := cpp
 SOURCES := $(shell find $(SRCDIR) -type f -name *.$(SRCEXT))

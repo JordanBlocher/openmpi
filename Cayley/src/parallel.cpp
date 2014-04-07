@@ -36,7 +36,7 @@ MPI_Datatype MPI_Tuple;
 MPI_Datatype MPI_Polynomial;
 
 void master(int, int, Polynomial&, int&);
-void slave(int, int);
+void slave();
 void construct_MPI_DataTypes();
 void check_cover(T4, int, int, Polynomial&);
 void print_cover(vector<bool>, int);
