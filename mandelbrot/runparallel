@@ -1,0 +1,12 @@
+#!/bin/bash
+
+EXPECTED_ARGS=3
+E_BADARGS=65
+
+if [ $# -le $EXPECTED_ARGS ]
+    then
+        echo "Usage: runparallel <numprocs> <rows> <cols> (filename)"
+        exit $E_BADARGS
+        fi
+make 
+mpirun -np $1 ./bin/mandelbrot $2 $3 $4
