@@ -77,6 +77,24 @@ void readNbodyData( char* file_name, Body**& universe )
 }
 
 
+void ComputeForces(int i)
+{
+    int j, r, r2, rx, ry, reciprocalForce;
+    Force f;
+    for(j=0; j<NBODIES; ++j)
+    {
+        if( i== j) continue;
+        rx = universe[i].x-universe[j].x;
+        ry = universe[i].y-universe[j].y;
+        r2 = sqr(rx) + sqr(ry);
+        r  = sqrt((double) r2);
+        reciprocalForce= G * universe[i].mass * universe[j].mass
+            / distance2;
+        f.magnitude[0] += ReciprocalForce * rx/r;
+        f.magnitude[1] += ReciprocalForce * ry/r;
+        f.magnitude[2] += ReciprocalForce * rz/r;
+    }
+}
 
 int main(int* argv, char** argc)
 {
