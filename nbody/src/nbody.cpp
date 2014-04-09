@@ -2,9 +2,10 @@
 #include <math.h>
 #include <stdlib.h>
 
+#define TIME_DIFFERENCE 0.0003
 #define G 6.67384e-11
 
-inline F(ma, mb, r){ return  G*ma*b/r*r; }
+inline Fx(ma, mb, r){ return  G*ma*b/r*r; }
 
 int time;
 
@@ -17,8 +18,7 @@ struct Body
 
 struct Force
 {
-    float x;
-    float y;
+    float magnitude[3];  // each magnitude corresponds to a cartesian direction
 };
 
 
