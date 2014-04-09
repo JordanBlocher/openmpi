@@ -5,7 +5,7 @@ UTIL := util
 BUILDDIR := build
 CFLAGS := -Wall -std=c++0x -g
 LIBS :=  -lm
-TARGET := bin/mandelbrot
+TARGET := bin/nbody
  
 SRCEXT := cpp
 SOURCES := $(shell find $(SRCDIR) -type f -name *.$(SRCEXT))
