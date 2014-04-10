@@ -17,6 +17,7 @@ int TIME, NBODIES;
 
 struct Body
 {
+    int index;
     float mass;
     float position[3];
     float velocity[3];    
@@ -27,11 +28,23 @@ struct Force
     float magnitude[3];  // each magnitude corresponds to a cartesian direction
 };
 
+struct Universe
+{
+    float COM[3]; 
+};
+
+struct Octree
+{
+    float COM[3]; // center of mass
+    Octree *nodes[8];
+    Universe *universe; 
+};
+
 void readNbodyData( char* file_name, Body**& universe );
 
 void readNbodyData( char* file_name, Body**& universe )
 {
-  // variables
+  // variables 
   FILE* file = NULL;
   int i = 0;
 
@@ -65,24 +78,24 @@ void readNbodyData( char* file_name, Body**& universe )
 }
 
 
-void ComputeForce(int i, Body **universe) // wrong way to pass universe, hold please
+void ComputeForce(int i, Body **universe, Force **forces) // wrong way to pass universe, hold please
 {
     int j, k;
     float d, r2, r[3], reciprocalForce;
-    Force f;
+    // Compute actions of body i on the universe
     for(j=0; j<NBODIES; ++j)
     {
         if( i== j) continue;
         r2 = 0;
         for(k=0; k<3; k++)
         {
-            r[k] = universe[i]->position[k]-universe[j]->position[k];
-            r2 += sqrt(r[k]);
+            r[k] = universe[i]->position[k]-universe[j]->position[k]; //rx, ry, rz
+            r2 += r[k]*r[k]; // r*r
         }
-        d  = sqrt((double) r2);
-        reciprocalForce = G * universe[i]->mass * universe[j]->mass/ r2;
+        d  = sqrt((double) r2); // distance = sqrt(rx2 + ry2 + rz2)
+        reciprocalForce = G * universe[i]->mass * universe[j]->mass/ r2; // F = G*(ma - mb)/r*r
         for(k=0; k<3; k++)
-            f.magnitude[k] += reciprocalForce * r[k]/d;
+            forces[j]->magnitude[k] += reciprocalForce * r[k]/d; // Action of body i on body j
     }
 }
 
@@ -94,6 +107,7 @@ int main(int, char** argv)
     Body *universe;
     Force *forces;
 
+    // Temp universe for pointer swapping
     Body *temp = new Body[NBODIES];
     for(t=0; t<TIME; ++t)
     {
@@ -105,7 +119,7 @@ int main(int, char** argv)
                 // Leapfrog : v(t - 1/2)
                 vminushalf[j] = universe[i].velocity[j];   
             }
-            ComputeForce(i, &universe);
+            ComputeForce(i, &universe, &forces);
             for(j=0; j<3; ++j)
             {
                 // Leapfrog : v(t + 1/2)
