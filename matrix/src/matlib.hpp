@@ -64,16 +64,6 @@ class Matrix
                     }
                     else
                     {
-                        // if !align
-                        // row = 0 0 0 1 1 1 2 2 2
-                        // i   = 0 1 2 0 1 2 0 1 2
-                        // r1  = 0 3 6 1 4 7 2 5 8
-                        // r2  = 3 6 0 4 7 1 5 8 2
-                        // else
-                        // row = 0 0 0 1 1 1 2 2 2
-                        // i   = 0 1 2 0 1 2 0 1 2
-                        // r1  = 0 3 6 1 4 7 2 5 8
-                        // r2  = 0 3 6 4 7 1 8 2 5
                         r1 = row*bmSize+i;
                         if(align)
                             r2 = row*bmSize+(i+row)%bmSize;
@@ -86,36 +76,6 @@ class Matrix
         delete [] cmat;
         cmat = temp;
         
-        /*
-        for(row=0; row<N; row+=size)
-            for(col=0; col<N; col+=size)
-                for(i=0; i<size; ++i)
-                    for (j=0; j<size; ++j)
-                    {
-                        int r1 = row+i; // original row index
-                        int r2 = row+i; // shifted row index
-                        int c1 = col+j; // original col index
-                        int c2 = col+j; // shifted col index
-                        if(colshift)
-                        {
-                            cshift = align ? col : size;
-                            r2 = (r2 - cshift) < 0 ? N + (r2 - cshift) : r2 - cshift;
-                        }
-                        else
-                        {
-                            rshift = align ? row : size;
-                            c2 = (c2 - rshift) < 0 ? N + (c2 - rshift) : c2 - rshift;
-                        }
-
-                        // compute matrix indices
-                        int idx1 = r1*N+c1;
-                        int idx2 = r2*N+c2;
-
-                        temp[idx2] = mat[idx1];
-                    }
-        */
- 
-        //setRowIndexing(size, N);
    }
 
     void setRowIndexing(int size, int N, bool mapBack=false)

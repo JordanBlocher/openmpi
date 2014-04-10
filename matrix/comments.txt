@@ -1,1 +1,7 @@
-Test will generate a random matrix to multiply with the identity.
+Test will generate a matrix to multiply with the identity/ inverse identity.
+
+Print statements are outside of main program function and timers.
+
+Compile with mpic++ -lm -std=c++0x
+
+

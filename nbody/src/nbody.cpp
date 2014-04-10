@@ -1,9 +1,17 @@
 #include <stdio.h>
-#include <math.h>
 #include <stdlib.h>
+#include <math.h>
+#include <fstream>
+#include <cmath>
+#include <iostream>
+#include <cstring>
+
+using std::cout;
+using std::endl;
 
 #define TIME_DIFFERENCE 0.0003
 #define G 6.67384e-11
+#define DT 0.003
 
 int TIME, NBODIES;
 
@@ -18,26 +26,6 @@ struct Force
 {
     float magnitude[3];  // each magnitude corresponds to a cartesian direction
 };
-
-void ComputeForces(int i)
-{
-    int j, r, r2, rx, ry, reciprocalForce;
-    Force f;
-    for(j=0; j<NBODIES; ++j)
-    {
-        if( i== j) continue;
-        rx = universe[i].x-universe[j].x;
-        ry = universe[i].y-universe[j].y;
-        r2 = sqr(rx) + sqr(ry);
-        r  = sqrt((double) r2);
-        reciprocalForce= G * universe[i].mass * universe[j].mass
-            / distance2;
-        f.magnitude[0] += ReciprocalForce * rx/r;
-        f.magnitude[1] += ReciprocalForce * ry/r;
-        f.magnitude[2] += ReciprocalForce * rz/r;
-    }
-}
-
 
 void readNbodyData( char* file_name, Body**& universe );
 
@@ -69,7 +57,7 @@ void readNbodyData( char* file_name, Body**& universe )
 
     // read in the body's position as a spacial coordinate triple
     fscanf( file, "%f %f %f", &(universe[i]->position[0]),
-            &(universe[i]->position[1]), &(universe[i]-position[2]) );
+            &(universe[i]->position[1]), &(universe[i]->position[2]) );
   }
 
   // return the universe array by reference
@@ -77,29 +65,34 @@ void readNbodyData( char* file_name, Body**& universe )
 }
 
 
-void ComputeForces(int i)
+void ComputeForce(int i, Body **universe) // wrong way to pass universe, hold please
 {
-    int j, r, r2, rx, ry, reciprocalForce;
+    int j, k;
+    float d, r2, r[3], reciprocalForce;
     Force f;
     for(j=0; j<NBODIES; ++j)
     {
         if( i== j) continue;
-        rx = universe[i].x-universe[j].x;
-        ry = universe[i].y-universe[j].y;
-        r2 = sqr(rx) + sqr(ry);
-        r  = sqrt((double) r2);
-        reciprocalForce= G * universe[i].mass * universe[j].mass
-            / distance2;
-        f.magnitude[0] += ReciprocalForce * rx/r;
-        f.magnitude[1] += ReciprocalForce * ry/r;
-        f.magnitude[2] += ReciprocalForce * rz/r;
+        r2 = 0;
+        for(k=0; k<3; k++)
+        {
+            r[k] = universe[i]->position[k]-universe[j]->position[k];
+            r2 += sqrt(r[k]);
+        }
+        d  = sqrt((double) r2);
+        reciprocalForce = G * universe[i]->mass * universe[j]->mass/ r2;
+        for(k=0; k<3; k++)
+            f.magnitude[k] += reciprocalForce * r[k]/d;
     }
 }
 
-int main(int* argv, char** argc)
+int main(int, char** argv)
 {
     TIME = atoi(argv[1]);
     int i, j, t;
+    float vminushalf[3], vplushalf[3];
+    Body *universe;
+    Force *forces;
 
     Body *temp = new Body[NBODIES];
     for(t=0; t<TIME; ++t)
@@ -109,8 +102,18 @@ int main(int* argv, char** argc)
             // Force routine
             for(j=0; j<3; ++j)
             {
-                ComputeForce(i);
-                temp[i].position[j] = universe[i].position[j] + Forces[i];   
+                // Leapfrog : v(t - 1/2)
+                vminushalf[j] = universe[i].velocity[j];   
+            }
+            ComputeForce(i, &universe);
+            for(j=0; j<3; ++j)
+            {
+                // Leapfrog : v(t + 1/2)
+                vplushalf[j] = 0.5*(universe[i].velocity[j] + forces[i].magnitude[j]/universe[i].mass*DT);
+                // v(t)
+                temp[i].velocity[j] = (vplushalf[j] - vminushalf[j])*universe[i].mass*DT;   
+                // x(t + 1/2)
+                temp[i].position[j] = universe[i].position[j] + universe[i].position[j] + vplushalf[j]*DT;   
             }
         } 
         delete [] universe;
