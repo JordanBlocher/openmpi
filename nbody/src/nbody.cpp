@@ -48,11 +48,11 @@ void readNbodyData( char* file_name, Body**& universe )
   fscanf( file, "%d", &NBODIES );
 
   // allocate the array to contain pointers to all of the bodies
-  universe = calloc( NBODIES, sizeof( Body* ) );
+  universe = (Body**)calloc( NBODIES, sizeof( Body* ) );
   for( i = 0; i < NBODIES; i++ )
   {
     // allocate the bodies themselves
-    universe[i] = calloc( 1, sizeof( Body ) );
+    universe[i] = (Body*)calloc( 1, sizeof( Body ) );
   }
 
   // read in all body information
@@ -71,7 +71,7 @@ void readNbodyData( char* file_name, Body**& universe )
 }
 
 
-void ComputeForce(int i, Body **&universe, Force **&forces) // wrong way to pass universe, hold please
+void ComputeForce(int i, Body **universe, Force **&forces) // wrong way to pass universe, hold please
 {
     int j, k;
     float d, r2, r[3], reciprocalForce;
