@@ -1,0 +1,14 @@
+#!/bin/bash
+
+if [ $# -eq 0 ]
+then
+    echo "Number of bodies needed."
+fi
+
+for((i=0;i<$1;i++))
+do
+    gnuplot -e "filein='data/state$i.dat'" -e "fileout='png/state$i.png'" plot
+done
+
+avconv -i png/state%1d.png -vcodec mpeg4 -r 10 universe.mp4
+

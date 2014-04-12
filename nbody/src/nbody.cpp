@@ -5,6 +5,7 @@
 #include <cmath>
 #include <iostream>
 #include <cstring>
+#include <sstream>
 
 using std::cout;
 using std::endl;
@@ -14,11 +15,12 @@ using std::endl;
 #define DT 0.003
 
 int TIME, NBODIES;
+float zeros[3] = {0, 0, 0};
 
 struct Body
 {
     int index;
-    float mass;
+    int mass;
     float position[3];
     float velocity[3];    
 };
@@ -35,39 +37,42 @@ struct Octree
     Body *universe; 
 };
 
-void readNbodyData( char* file_name, Body**& universe )
+void readNbodyData( char* file_name, Body**& universe, Force**& forces)
 {
-  // variables 
-  FILE* file = NULL;
-  int i = 0;
+    // variables 
+    FILE* file = NULL;
+    int i = 0;
 
-  // open the file
-  file = fopen( file_name , "r");
+    // open the file
+    file = fopen( file_name , "r");
 
-  // read in the number of bodies
-  fscanf( file, "%d", &NBODIES );
+    // read in the number of bodies
+    fscanf( file, "%d", &NBODIES );
 
-  // allocate the array to contain pointers to all of the bodies
-  universe = (Body**)calloc( NBODIES, sizeof( Body* ) );
-  for( i = 0; i < NBODIES; i++ )
-  {
-    // allocate the bodies themselves
-    universe[i] = (Body*)calloc( 1, sizeof( Body ) );
-  }
+    // allocate the array to contain pointers to all of the bodies
+    universe = (Body**)calloc( NBODIES, sizeof( Body* ) );
+    forces = (Force**)calloc( NBODIES, sizeof( Force* ) );
+    for( i = 0; i < NBODIES; i++ )
+    {
+        // allocate the bodies themselves
+        universe[i] = (Body*)calloc( 1, sizeof( Body ) );
+        // allocate memory for forces
+        forces[i] = (Force*)calloc( 1, sizeof( Force ) );
+        memcpy(forces[i]->magnitude, zeros, 3*sizeof(float));
+    }
 
-  // read in all body information
-  for( i = 0; i < NBODIES; ++i )
-  {
-    // read in the mass value
-    fscanf( file, "%f", &(universe[i]->mass) );
+    // read in all body information
+    for( i = 0; i < NBODIES; ++i )
+    {
+        // read in the body's position as a spacial coordinate triple
+        fscanf( file, "%f %f %f", &(universe[i]->position[0]),
+                &(universe[i]->position[1]), &(universe[i]->position[2]) );
+        // read in the mass value
+        fscanf( file, "%d", &(universe[i]->mass) );
+    }
 
-    // read in the body's position as a spacial coordinate triple
-    fscanf( file, "%f %f %f", &(universe[i]->position[0]),
-            &(universe[i]->position[1]), &(universe[i]->position[2]) );
-  }
-
-  // return the universe array by reference
-  // (note: we are not error checking for production efficiency)
+    // return the universe array by reference
+    // (note: we are not error checking for production efficiency)
 }
 
 
@@ -92,20 +97,38 @@ void ComputeForce(int i, Body **universe, Force **&forces) // wrong way to pass 
     }
 }
 
-int main(int, char** argv)
+int main(int argc, char** argv)
 {
+    if(argc < 2) 
+    {
+        cout <<" Usage: nbody <time>\n\n";
+        return 0;
+    }
+ 
     TIME = atoi(argv[1]);
     int i, j, t;
     float vminushalf[3], vplushalf[3];
     Body **universe;
     Force **forces;
+    FILE* file = NULL;
+    std::ostringstream ss;
 
-    readNbodyData("data/state0.dat", universe);
+    readNbodyData("data/init.dat", universe, forces);
 
-    // Temp universe for pointer swapping
-    Body **temp = new Body*[NBODIES];
     for(t=0; t<TIME; ++t)
     {
+        // Print state of universe
+        ss << "data/state" << t << ".dat";
+        file = fopen(ss.str().c_str(), "w");
+        for(i=0; i<NBODIES; ++i)
+            fprintf( file, "%f %f %f %d\n", universe[i]->position[0], universe[i]->position[1], universe[i]->position[2], universe[i]->mass);
+        ss.str("");
+
+        // Temp universe for pointer swapping
+        Body **temp = (Body**)calloc( NBODIES, sizeof( Body* ) );
+        for(i=0; i<NBODIES; ++i)
+            temp[i] = (Body*)calloc(1, sizeof(Body));
+
         for(i=0; i<NBODIES; ++i)
         {
             // Force routine
@@ -123,12 +146,13 @@ int main(int, char** argv)
                 temp[i]->velocity[j] = (vplushalf[j] - vminushalf[j])*universe[i]->mass*DT;   
                 // x(t + 1/2)
                 temp[i]->position[j] = universe[i]->position[j] + universe[i]->position[j] + vplushalf[j]*DT;   
+                temp[i]->mass = universe[i]->mass;
             }
         } 
-        delete [] universe;
+        //delete [] universe;
         universe = temp;
-    }
+      }
 
 
-    return 0;
-}
+      return 0;
+                }

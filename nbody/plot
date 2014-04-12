@@ -1,5 +1,5 @@
 #Usage: gnuplot -e "filein='infile.dat'" -e "fileout='outfile.eps'" -e plot
-set term post color
+set term png
 set nokey
 set nolabel
 unset xtics
