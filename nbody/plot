@@ -1,0 +1,23 @@
+#Usage: gnuplot -e "filein='infile.dat'" -e "fileout='outfile.eps'" -e plot
+set term post color
+set nokey
+set nolabel
+unset xtics
+unset ytics
+unset ztics
+set hidden3d
+set grid
+unset colorbox
+
+set xlabel "X"
+set ylabel "Y" 
+set zlabel "Z"
+
+set xrange [-100:400]
+set yrange [-100:400]
+set zrange [-100:400]
+
+set output fileout
+set view 45, 30, 1, 1
+splot filein using 1:2:3:4 with points ps variable pt 7 lt palette
+
