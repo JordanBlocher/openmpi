@@ -28,19 +28,12 @@ struct Force
     float magnitude[3];  // each magnitude corresponds to a cartesian direction
 };
 
-struct Universe
-{
-    float COM[3]; 
-};
-
 struct Octree
 {
     float COM[3]; // center of mass
     Octree *nodes[8];
-    Universe *universe; 
+    Body *universe; 
 };
-
-void readNbodyData( char* file_name, Body**& universe );
 
 void readNbodyData( char* file_name, Body**& universe )
 {
@@ -49,7 +42,7 @@ void readNbodyData( char* file_name, Body**& universe )
   int i = 0;
 
   // open the file
-  file = fopen( file_name );
+  file = fopen( file_name , "r");
 
   // read in the number of bodies
   fscanf( file, "%d", &NBODIES );
@@ -78,7 +71,7 @@ void readNbodyData( char* file_name, Body**& universe )
 }
 
 
-void ComputeForce(int i, Body **universe, Force **forces) // wrong way to pass universe, hold please
+void ComputeForce(int i, Body **&universe, Force **&forces) // wrong way to pass universe, hold please
 {
     int j, k;
     float d, r2, r[3], reciprocalForce;
@@ -104,11 +97,13 @@ int main(int, char** argv)
     TIME = atoi(argv[1]);
     int i, j, t;
     float vminushalf[3], vplushalf[3];
-    Body *universe;
-    Force *forces;
+    Body **universe;
+    Force **forces;
+
+    readNbodyData("data/state0.dat", universe);
 
     // Temp universe for pointer swapping
-    Body *temp = new Body[NBODIES];
+    Body **temp = new Body*[NBODIES];
     for(t=0; t<TIME; ++t)
     {
         for(i=0; i<NBODIES; ++i)
@@ -117,17 +112,17 @@ int main(int, char** argv)
             for(j=0; j<3; ++j)
             {
                 // Leapfrog : v(t - 1/2)
-                vminushalf[j] = universe[i].velocity[j];   
+                vminushalf[j] = universe[i]->velocity[j];   
             }
-            ComputeForce(i, &universe, &forces);
+            ComputeForce(i, universe, forces);
             for(j=0; j<3; ++j)
             {
                 // Leapfrog : v(t + 1/2)
-                vplushalf[j] = 0.5*(universe[i].velocity[j] + forces[i].magnitude[j]/universe[i].mass*DT);
+                vplushalf[j] = 0.5*(universe[i]->velocity[j] + forces[i]->magnitude[j]/universe[i]->mass*DT);
                 // v(t)
-                temp[i].velocity[j] = (vplushalf[j] - vminushalf[j])*universe[i].mass*DT;   
+                temp[i]->velocity[j] = (vplushalf[j] - vminushalf[j])*universe[i]->mass*DT;   
                 // x(t + 1/2)
-                temp[i].position[j] = universe[i].position[j] + universe[i].position[j] + vplushalf[j]*DT;   
+                temp[i]->position[j] = universe[i]->position[j] + universe[i]->position[j] + vplushalf[j]*DT;   
             }
         } 
         delete [] universe;
