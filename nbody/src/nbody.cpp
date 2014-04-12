@@ -108,12 +108,17 @@ int main(int argc, char** argv)
     TIME = atoi(argv[1]);
     int i, j, t;
     float vminushalf[3], vplushalf[3];
-    Body **universe;
+    Body **universe, **temp, **swap;
     Force **forces;
     FILE* file = NULL;
     std::ostringstream ss;
 
     readNbodyData("data/init.dat", universe, forces);
+
+    // Temp universe for pointer swapping
+    temp = (Body**)calloc( NBODIES, sizeof( Body* ) );
+    for(i=0; i<NBODIES; ++i)
+        temp[i] = (Body*)calloc(1, sizeof(Body));
 
     for(t=0; t<TIME; ++t)
     {
@@ -124,12 +129,7 @@ int main(int argc, char** argv)
             fprintf( file, "%f %f %f %d\n", universe[i]->position[0], universe[i]->position[1], universe[i]->position[2], universe[i]->mass);
         ss.str("");
 
-        // Temp universe for pointer swapping
-        Body **temp = (Body**)calloc( NBODIES, sizeof( Body* ) );
-        for(i=0; i<NBODIES; ++i)
-            temp[i] = (Body*)calloc(1, sizeof(Body));
-
-        for(i=0; i<NBODIES; ++i)
+         for(i=0; i<NBODIES; ++i)
         {
             // Force routine
             for(j=0; j<3; ++j)
@@ -149,8 +149,9 @@ int main(int argc, char** argv)
                 temp[i]->mass = universe[i]->mass;
             }
         } 
-        //delete [] universe;
+        swap = universe;
         universe = temp;
+        temp = swap;
       }
 
 
