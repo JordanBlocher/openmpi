@@ -67,6 +67,11 @@ void readNbodyData( char* file_name, Body**& universe, Force**& forces)
         // read in the body's position as a spacial coordinate triple
         fscanf( file, "%f %f %f", &(universe[i]->position[0]),
                 &(universe[i]->position[1]), &(universe[i]->position[2]) );
+
+        // read in the initial velocity for the body
+        fscanf( file, "%f %f %f", &(universe[i]->position[0]),
+                &(universe[i]->velocity[1]), &(universe[i]->velocity[2]) );
+
         // read in the mass value
         fscanf( file, "%d", &(universe[i]->mass) );
     }
