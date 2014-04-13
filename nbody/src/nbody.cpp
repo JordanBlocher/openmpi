@@ -164,14 +164,14 @@ int main(int argc, char** argv)
                 //temp[i]->velocity[j] = (vplushalf[j] - vminushalf[j])*universe[i]->mass*DT;   
                 temp[i]->velocity[j] = universe[i]->velocity[j] + forces[i]->magnitude[j]*DT/(float)universe[i]->mass;   
                 printf("temp[%d]->vel[%d] = universe[%d]->vel[%d] + forces[%d]->mag[%d]/universe[%d]->mass \n",i, j, i, j, i, j, i); 
-                printf(" %f = %f + %f/%d\n", universe[i]->velocity[j], forces[i]->magnitude[j]/universe[i]->mass);
+                printf(" %f = %f + %f/%d\n", temp[i]->velocity[j], universe[i]->velocity[j], forces[i]->magnitude[j]/universe[i]->mass);
                 // x(t + 1/2)
                 //temp[i]->position[j] = universe[i]->position[j] + universe[i]->position[j] * vplushalf[j]*DT;   
                 temp[i]->position[j] = universe[i]->position[j] + temp[i]->velocity[j]*DT;   
                 temp[i]->mass = universe[i]->mass;
             }
 
-        } 
+        }
  printf("Temp Bodies, time %d\n", t);
         for(i=0; i<NBODIES; ++i)
         {
