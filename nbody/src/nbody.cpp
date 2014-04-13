@@ -74,6 +74,10 @@ void readNbodyData( char* file_name, Body**& universe, Force**& forces)
 
         // read in the mass value
         fscanf( file, "%d", &(universe[i]->mass) );
+        universe[i]->mass *= 100000000;
+        universe[i]->velocity[0] *= 0;
+        universe[i]->velocity[1] *= 0;
+        universe[i]->velocity[2] *= 0;
     }
 
     // return the universe array by reference
@@ -81,7 +85,7 @@ void readNbodyData( char* file_name, Body**& universe, Force**& forces)
 }
 
 
-void ComputeForce(int i, Body **universe, Force **&forces) // wrong way to pass universe, hold please
+void ComputeForce(int i, Body **universe, Force **&forces) 
 {
     int j, k;
     float d, r2, r[3], reciprocalForce;
@@ -131,30 +135,52 @@ int main(int argc, char** argv)
         // Print state of universe
         ss << "data/state" << t << ".dat";
         file = fopen(ss.str().c_str(), "w");
+ printf("Bodies, time %d\n", t);
         for(i=0; i<NBODIES; ++i)
-            fprintf( file, "%f %f %f %d\n", universe[i]->position[0], universe[i]->position[1], universe[i]->position[2], universe[i]->mass);
+        {
+            fprintf( file, "%f %f %f %d\n", universe[i]->position[0], universe[i]->position[1], universe[i]->position[2], universe[i]->mass/100000000);
+   //     printf("%f %f %f %d\n", universe[i]->position[0], universe[i]->position[1], universe[i]->position[2], universe[i]->mass/100000000);
+        printf("%f %f %f\n", universe[i]->velocity[0], universe[i]->velocity[1], universe[i]->velocity[2]);
+        }
         ss.str("");
+
 
          for(i=0; i<NBODIES; ++i)
         {
             // Force routine
+            /*
             for(j=0; j<3; ++j)
             {
                 // Leapfrog : v(t - 1/2)
                 vminushalf[j] = universe[i]->velocity[j];   
             }
+            */
             ComputeForce(i, universe, forces);
             for(j=0; j<3; ++j)
             {
                 // Leapfrog : v(t + 1/2)
-                vplushalf[j] = 0.5*(universe[i]->velocity[j] + forces[i]->magnitude[j]/universe[i]->mass*DT);
+                //vplushalf[j] = 0.5*(universe[i]->velocity[j] + forces[i]->magnitude[j]/universe[i]->mass*DT);
                 // v(t)
-                temp[i]->velocity[j] = (vplushalf[j] - vminushalf[j])*universe[i]->mass*DT;   
+                //temp[i]->velocity[j] = (vplushalf[j] - vminushalf[j])*universe[i]->mass*DT;   
+                temp[i]->velocity[j] = universe[i]->velocity[j] + forces[i]->magnitude[j]*DT/(float)universe[i]->mass;   
+                printf("temp[%d]->vel[%d] = universe[%d]->vel[%d] + forces[%d]->mag[%d]/universe[%d]->mass \n",i, j, i, j, i, j, i); 
+                printf(" %f = %f + %f/%d\n", universe[i]->velocity[j], forces[i]->magnitude[j]/universe[i]->mass);
                 // x(t + 1/2)
-                temp[i]->position[j] = universe[i]->position[j] + universe[i]->position[j] + vplushalf[j]*DT;   
+                //temp[i]->position[j] = universe[i]->position[j] + universe[i]->position[j] * vplushalf[j]*DT;   
+                temp[i]->position[j] = universe[i]->position[j] + temp[i]->velocity[j]*DT;   
                 temp[i]->mass = universe[i]->mass;
             }
+
         } 
+ printf("Temp Bodies, time %d\n", t);
+        for(i=0; i<NBODIES; ++i)
+        {
+ //printf("%f %f %f %d\n", temp[i]->position[0], temp[i]->position[1], temp[i]->position[2], temp[i]->mass/100000000);
+ printf("%f %f %f\n", temp[i]->velocity[0], temp[i]->velocity[1], temp[i]->velocity[2]);
+ printf("Force: %f %f %f\n", forces[i]->magnitude[0], forces[i]->magnitude[1], forces[i]->magnitude[2]);
+        }
+
+
         swap = universe;
         universe = temp;
         temp = swap;
