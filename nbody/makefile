@@ -6,6 +6,8 @@ BUILDDIR := build
 CFLAGS := -Wall -std=c++0x -g
 LIBS :=  -lm
 TARGET := bin/nbody
+PNG := png
+DATA := data
  
 SRCEXT := cpp
 SOURCES := $(shell find $(SRCDIR) -type f -name *.$(SRCEXT))
@@ -17,11 +19,11 @@ $(TARGET): $(OBJECTS)
 	@echo " Linking..."; $(CC) $^ -o $(TARGET) $(LIBS)
  
 $(BUILDDIR)/%.o: $(SRCDIR)/%.$(SRCEXT) 
-	@mkdir -p $(BUILDDIR)
+	@mkdir -p $(BUILDDIR) -p $(PNG) -p $(DATA)
 	@echo " CC $<"; $(CC) $(CFLAGS) -I$(INCLUDEDIR) -I$(UTIL) -MD -MF $(@:.o=.deps) -o $@ -c $< $(LIBS)
  
 clean:
-	@echo " Cleaning..."; $(RM) -r $(BUILDDIR) $(TARGET)
+	@echo " Cleaning..."; $(RM) -r $(BUILDDIR) $(DATA) $(PNG) $(TARGET)
 
 -include $(DEPS)
 
