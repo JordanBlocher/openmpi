@@ -11,8 +11,8 @@ using std::cout;
 using std::endl;
 
 #define TIME_DIFFERENCE 0.0003
-#define G 6.67384e-4
-#define DT 0.003
+#define G 6.67384e-2
+#define DT 100
 
 int TIME, NBODIES;
 float zeros[3] = {0, 0, 0};
