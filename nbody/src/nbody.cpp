@@ -69,7 +69,7 @@ void readNbodyData( char* file_name, Body**& universe, Force**& forces)
                 &(universe[i]->position[1]), &(universe[i]->position[2]) );
 
         // read in the initial velocity for the body
-        fscanf( file, "%f %f %f", &(universe[i]->position[0]),
+        fscanf( file, "%f %f %f", &(universe[i]->velocity[0]),
                 &(universe[i]->velocity[1]), &(universe[i]->velocity[2]) );
 
         // read in the mass value
@@ -96,7 +96,8 @@ void ComputeForce(int i, Body **universe, Force **&forces) // wrong way to pass 
             r2 += r[k]*r[k]; // r*r
         }
         d  = sqrt((double) r2); // distance = sqrt(rx2 + ry2 + rz2)
-        reciprocalForce = G * universe[i]->mass * universe[j]->mass/ r2; // F = G*(ma - mb)/r*r
+        // F = G*mj*mi/r*r (gravitational force between body i & j)
+        reciprocalForce = G * universe[i]->mass * universe[j]->mass/ r2;
         for(k=0; k<3; k++)
             forces[j]->magnitude[k] += reciprocalForce * r[k]/d; // Action of body i on body j
     }
