@@ -12,7 +12,7 @@ using std::endl;
 
 #define TIME_DIFFERENCE 0.0003
 #define G 6.67384e-2  // Factor all values by 1 billion
-#define DT 100
+#define DT 100 // Big time step so to see movement
 
 int TIME, NBODIES;
 float zeros[3] = {0, 0, 0};
