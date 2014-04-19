@@ -20,7 +20,7 @@ using std::endl;
 
 int TIME, NBODIES;
 float zeros[3] = {0, 0, 0};
-int numprocs, rank, idx;
+int numprocs, rank;
 
 MPI_Datatype MPI_Body;
 
@@ -52,8 +52,60 @@ struct Node
     Cell cell;
 };
 
+// Create new tree branch helper function
+void initNodes(Node*& universe)
+{
+    universe->type = 1;
+    universe->mass = 0;
+    universe->cell.nodes[0] = NULL;
+    universe->cell.nodes[1] = NULL;
+    universe->cell.nodes[2] = NULL;
+    universe->cell.nodes[3] = NULL;
+    universe->cell.nodes[4] = NULL;
+    universe->cell.nodes[5] = NULL;
+    universe->cell.nodes[6] = NULL;
+    universe->cell.nodes[7] = NULL;
+
+}
+
+void printBodies(Body**& bodies, int t)
+{
+    int i;
+    for(i=0; i<NBODIES; ++i)
+        printf("time %d, node %p: %f %f %f %d\n", t, bodies[i], bodies[i]->position[0], bodies[i]->position[1], bodies[i]->position[2], bodies[i]->mass);
+
+}
+
+void printNode(Node*& node)
+{
+    int i;
+    printf("node %p: %f %f %f %f\n", node, node->position[0], node->position[1], node->position[2], node->mass);
+    if(node->type == 1)
+        for(i=0; i<8; i++)
+        {
+            if(node->cell.nodes[i] == NULL)
+                printf("node[%d] at %p: \n", i, node->cell.nodes[i]);
+            else if(node->cell.nodes[i] != NULL)
+                printf("node[%d] at %p: %f %f %f %f\n", i, node->cell.nodes[i], node->cell.nodes[i]->position[0], node->cell.nodes[i]->position[1], node->cell.nodes[i]->position[2], node->cell.nodes[i]->mass);
+        }
+}
+
+void printBody(Body*& body)
+{
+    printf("body %p: %f %f %f %d\n", body, body->position[0], body->position[1], body->position[2], body->mass);
+}
+
+void printTree(Node*& root, int t)
+{
+    int i;
+    for(i=0; i<8; i++)
+        if(root->cell.nodes[i] != NULL)
+            //printTree(root->cell.nodes[i], t);
+    printf("time %d, node %p: %f %f %f %f\n", t, root, root->position[0], root->position[1], root->position[2], root->mass);
+
+}
 // Read initial data and allocate memory
-void readNbodyData( char* file_name, Node**& universe, Body**& bodies, Force**& forces)
+void readNbodyData(char* file_name, Node**& universe, Body**& bodies, Force**& forces)
 {
     // variables 
     FILE* file = NULL;
@@ -70,7 +122,6 @@ void readNbodyData( char* file_name, Node**& universe, Body**& bodies, Force**& 
     universe = (Node**)calloc( NBODIES, sizeof( Node* ) );
     forces = (Force**)calloc( NBODIES, sizeof( Force* ) );
     bodies = (Body**)calloc( NBODIES, sizeof( Body* ) );
-    body = (Body*)calloc( NBODIES, sizeof( Body ) );
     for( i = 0; i < NBODIES; i++ )
     {
         // allocate the bodies themselves
@@ -83,6 +134,9 @@ void readNbodyData( char* file_name, Node**& universe, Body**& bodies, Force**& 
     // read in all body information
     for( i = 0; i < NBODIES; ++i )
     {
+        // Temp body to allow same pointer in tree and array
+        body = (Body*)calloc( NBODIES, sizeof( Body ) );
+
         universe[i]->type = 0;
         // read in the body's position as a spacial coordinate triple
         fscanf( file, "%f %f %f", &(body->position[0]),
@@ -95,116 +149,151 @@ void readNbodyData( char* file_name, Node**& universe, Body**& bodies, Force**& 
         // read in the mass value
         fscanf( file, "%d", &(body->mass) );
 
-        bodies[i] = body;
+        // Bodies are stored as pointers in pointer array for message-passing
+        bodies[i] = body; 
 
+        // Body pointer also stored in universe for binary space recursion
         universe[i]->type = 0;
         universe[i]->cell.body = bodies[i];
         universe[i]->mass = bodies[i]->mass;
         for(j=0; j<3; j++)
             universe[i]->position[j] = bodies[i]->position[j];
-
-        free(body);
-
     }
 
+    free(body);
     // return the universe array by reference
     // (note: we are not error checking for production efficiency)
 }
 
-// Force routine
-void ComputeForce(int i, Node**& universe, Force**& forces) 
+// Leapfrog routine
+void Leapfrog(Node*& body, Force*& force)
 {
-    int j, k;
-    float d, r2, r[3], reciprocalForce;
-    // Compute actions of body i on the universe
-    for(j=0; j<NBODIES; ++j)
-    {
-        if( i== j) continue;
-        r2 = 0;
-        for(k=0; k<3; k++)
-        {
-            r[k] = universe[i]->cell.body->position[k] - universe[j]->cell.body->position[k]; //rx, ry, rz
-            r2 += r[k]*r[k]; // r*r
-        }
-        d  = sqrt((double) r2); // distance = sqrt(rx2 + ry2 + rz2)
-        // F = G*mj*mi/r*r (gravitational force between body i & j)
-        reciprocalForce = G * universe[i]->mass * universe[j]->mass/ r2;
-        for(k=0; k<3; k++)
-            forces[j]->magnitude[k] = reciprocalForce * r[k]/d; // Action of body i on body j
-    }
-}
-
-// Recursive tree force computation
-void ComputeForceRecursive(Node**& universe, Force**& forces, Body**& bodies, int t)
-{
-    int i, j; 
+    int j;
+    Node* temp = (Node*)calloc(1, sizeof(Node));
     float vminushalf[3], vplushalf[3];
-    for(i=0; i<NBODIES; ++i)
-        ComputeForce(i, universe, forces);
-    for(i=0; i<NBODIES; ++i)
-    {
+
         for(j=0; j<3; ++j)
         {
             for(j=0; j<3; ++j)
             {
                 // Leapfrog : v(t - 1/2)
-                vminushalf[j] = universe[i]->velocity[j];   
+                vminushalf[j] = body->cell.body->velocity[j];   
             }
             // Leapfrog : v(t + 1/2)
-            vplushalf[j] = 0.5*(universe[i]->velocity[j] + forces[i]->magnitude[j]/universe[i]->mass*DT);
+            vplushalf[j] = 0.5*(body->cell.body->velocity[j] + force->magnitude[j]/body->mass*DT);
             // v(t)
-            temp[i]->velocity[j] = (vplushalf[j] - vminushalf[j])*universe[i]->mass*DT;   
+            temp->cell.body->velocity[j] = (vplushalf[j] - vminushalf[j])*body->mass*DT;   
             // x(t + 1/2)
-            temp[i]->position[j] = universe[i]->position[j] + universe[i]->position[j] * vplushalf[j]*DT;   
-            temp[i]->mass = universe[i]->mass;
+            temp->position[j] = body->position[j] + body->position[j] * vplushalf[j]*DT;   
+            temp->mass = body->mass;
         }
+    body = temp;
+
+    free(temp);
+}
+
+// Force routine
+void ComputeForce(Node*& mi, Node*& mj, Force*& force) 
+{
+    int k;
+    float d, r2, r[3], reciprocalForce;
+    // Compute actions of body i on the universe
+    r2 = 0;
+    for(k=0; k<3; k++)
+    {
+        r[k] = mi->position[k] - mj->position[k]; //rx, ry, rz
+        r2 += r[k]*r[k]; // r*r
+    }
+    d  = sqrt((double) r2); // distance = sqrt(rx2 + ry2 + rz2)
+    // F = G*mj*mi/r*r (gravitational force between body i & j)
+    reciprocalForce = G * mi->mass * mj->mass/ r2;
+    for(k=0; k<3; k++)
+        force->magnitude[k] = reciprocalForce * r[k]/d; // Action of body i on body j
+}
+
+// Recursive tree force computation
+void ComputeForceRecursive(Node*& system, Node*& body, Force*& force, float d2)
+{
+    int j;
+    float r[3], r2=0;
+
+    for(j=0; j<3; j++)
+    {
+        r[j] = system->position[j] - body->position[j]; //rx, ry, rz
+        r2 += r[j]*r[j]; // r*r
+    }
+    if(r2 < d2) // Recurse through smaller solar systems
+    {
+        if(system->type == 1)
+        {
+            d2*=0.25; // Decrease diameter of system for cutoff approximation
+            for(j=0; j<8; ++j)
+            {
+                if(system->cell.nodes[j] != NULL)
+                    ComputeForceRecursive(system->cell.nodes[j], body, force, d2);
+                else continue;
+            }
+        }
+        else // Compute force for local body
+        {
+            ComputeForce(system->cell.nodes[j], body, force);
+        }
+    }
+    else // Compute force approximation for solar system as mass cluster
+    {
+        ComputeForce(system, body, force);
     }
 }
 
-// Compute center of mass
-void ComputeCOM(Node *&node) // compute center of mass
+// Compute center of mass of tree or branch
+void ComputeCOM(Node *&node) 
 {
-    int m = 0, p[3];
+    int m = 0;
+    float tempPosition[3] = {0, 0, 0};
 
-    Node *ch;
+    Node *temp;
 
     int j = 0;
-    node->mass = m;
+    node->mass = m; // Initialize to zero
     int i;
     for (i = 0; i < 8; i++) 
     {
-        ch = node->cell.nodes[i];
-        if (ch != NULL) 
+        temp = node->cell.nodes[i];
+        if (temp != NULL) 
         {
+            // Swap out nodes to sum mass (going down the tree)
             node->cell.nodes[i] = NULL;
-            node->cell.nodes[j] = ch;
+            node->cell.nodes[j] = temp;
             j++;
 
-            if (ch->type != 0)
-                ComputeCOM(ch);
+            if (temp->type != 0) // Recurse if not at a leaf
+                ComputeCOM(temp);
 
-            m = ch->mass;
+            m = temp->mass;
             node->mass += m;
-            p[0] += ch->position[0] * m;
-            p[1] += ch->position[1] * m;
-            p[2] += ch->position[2] * m;
+            tempPosition[0] += temp->position[0] * m;
+            tempPosition[1] += temp->position[1] * m;
+            tempPosition[2] += temp->position[2] * m;
         }
     }
 
+    // Place this node at the center of the system
     m = 1.0 / node->mass;
-    node->position[0] = zeros[0] * m;
-    node->position[1] = zeros[1] * m;
-    node->position[2] = zeros[2] * m;
+    for(i=0; i<3; i++)
+        node->position[i] = zeros[i] * m;
+    
+    free(temp);
 }
 
 // Compute diameter of node and center
-void ComputeDTC(Node**& universe, float *center, float diameter) // compute distance to center
+void ComputeDTC(Node**& universe, float* center, float &diameter) // compute distance to center
 {
     float min[3] = { 1.0e6, 1.0e6, 1.0e6 };
     float max[3] = { -1.0e6, -1.0e6, -1.0e6 }; 
     float position[3];
 
     int i, j;
+    // Find largest distance between bodies
     for (i = 0; i < NBODIES; i++) 
     {
         position[0] = universe[i]->position[0];
@@ -219,28 +308,108 @@ void ComputeDTC(Node**& universe, float *center, float diameter) // compute dist
             if (max[j] < position[j])
                 max[j] = position[j];
         }
-
     }
-    diameter = max[0] - min[0];
-
+    diameter = max[0] - min[0]; // Default diameter to x-axis
+    
+    // Compute largest diameter in x, y, z
     for(j=1; j< 3; ++j)
     {
         if (diameter < (max[j] - min[j]))
             diameter = (max[j] - min[j]);
     }
 
+    // The center is the midpoint
     for(j=0; j< 3; ++j)
         center[j] = (max[j] + min[j]) * 0.5;
 
 }
 
+void insert(Node*& system, Node*& node, float r) 
+{
+	bool finished = false;
+    int j, idx1, idx2;
+    float rprev;
+    Node *temp, *newSystem;
+    cout<<"system\n";
+    printNode(system);
+    cout<<"node\n";
+    printNode(node);
+	do 
+    {
+		float d[3];
+        idx1=0;
+        for(j=0; j<3; j++)
+        {
+            if (system->position[j] < node->position[j]) 
+            {
+                // Part of tree algorithm, why?? A bit confused here, compute the index where the new node goes 
+                idx1 = (j == 0) ? 1 : (j == 1) ? idx1+2 : idx1+4;
+                d[j] = r; // Set maximum distance to be in system
+            }
+            else d[j] = 0; // If new system zero is max distance
+        }
+    cout<<"idx1 "<<idx1<<endl;
+        // We have room, make the node a child 
+		if (system->cell.nodes[idx1] == NULL) 
+        {
+			system->cell.nodes[idx1] = node;
+			finished = true;
+		} 
+        // System exists here, don't insert node, go further into the tree
+        else if (system->cell.nodes[idx1]->type == 1)
+        {
+    cout<<"GO DEEPER\n";
+    cout<<"system\n";
+    printNode(system);
+    cout<<"node\n";
+    printNode(node);
+	
+			r *= 0.5; // Make new system smaller
+			system = system->cell.nodes[idx1];
+		} 
+        // Tree is not deep enough, make the current system a branch 
+        else 
+        {
+    cout<<"BRANCH OUT\n";
+    cout<<"system\n";
+    printNode(system);
+    cout<<"node\n";
+    printNode(node);
+	
+			rprev = 0.5 * r;
+			newSystem = (Node*)calloc(1, sizeof(Node));
+            initNodes(newSystem);
+            for(j=0; j<3; j++)
+                newSystem->position[j] = system->position[j] - rprev + d[j]; 
+            idx2 = 0;
+            for(j=0; j<3; j++)
+			    if (newSystem->position[j] < node->position[j]) 
+                    idx2 = (j == 0) ? 1 : (j == 1) ? idx2+2 : idx2+4;
+
+    cout<<"idx2 "<<idx2<<endl;
+			newSystem->cell.nodes[idx2] = node;
+			temp = system->cell.nodes[idx1];
+			system->cell.nodes[idx1] = newSystem;
+			system = newSystem;
+			node = temp;
+			r = rprev;
+		}
+	} while (!finished);
+}
+
+// Create Body type for message-passing
 void CreateMPIDatatype()
 {
+    // Array of datatypes
     MPI_Datatype type[5] = { MPI_LB, MPI_INT, MPI_FLOAT, MPI_FLOAT, MPI_UB };
+    // Number of each type
     int block_len[5] = {1, 1, 3, 3, 1};
+    
+    // Displacements
     MPI_Aint disp[5];
-    Body body[2];
+    Body body[2]; // <-- used to calculate displacement to next body
 
+    // MPI gets addresses for displacement in memory buffer
     MPI_Get_address(&body[0], &disp[0]);
     MPI_Get_address(&(body[0].mass), &disp[1]);
     MPI_Get_address(&(body[0].position), &disp[2]);
@@ -252,6 +421,7 @@ void CreateMPIDatatype()
     disp[3] = disp[3] - disp[0];
     disp[4] = disp[4] - disp[0];
 
+    // MPI Body struct
     MPI_Type_create_struct(5, block_len, disp, type, &MPI_Body);
 
     MPI_Type_commit(&MPI_Body);
@@ -271,19 +441,10 @@ void printBodiesToFile(Body**& bodies, int t)
 
 }
 
-void initBodies(Node*& universe)
-{
-    universe->type = 1;
-    universe->mass = 0;
-    universe->cell.nodes[0] = NULL;
-    universe->cell.nodes[1] = NULL;
-    universe->cell.nodes[2] = NULL;
-    universe->cell.nodes[3] = NULL;
-    universe->cell.nodes[4] = NULL;
-    universe->cell.nodes[5] = NULL;
-    universe->cell.nodes[6] = NULL;
-    universe->cell.nodes[7] = NULL;
 
+
+void updateBodies()
+{
 }
 
 int main(int argc, char** argv)
@@ -297,22 +458,19 @@ int main(int argc, char** argv)
     TIME = atoi(argv[1]);
     int i, j, t, err;
     float center[3], diameter=0, radius=0;;
-    Node **universe, **temp, **swap;
+    Node **universe;
     Force **forces;
     Body **bodies;
-    idx = 0;
+    Node *root;
+    root = (Node*)calloc(1, sizeof( Node ));
 
     std::chrono::high_resolution_clock::time_point startclock, stopclock;
     std::chrono::duration<double> time_span;
 
     std::string filename = "data/init.dat";
     readNbodyData((char*)filename.c_str(), universe, bodies, forces);
-
-    // Temp universe for pointer swapping
-    temp = (Node**)calloc( NBODIES, sizeof( Node* ) );
-    for(i=0; i<NBODIES; ++i)
-        temp[i] = (Node*)calloc(1, sizeof(Node));
-
+cout<<"Bodies\n";
+    printBodies(bodies, 0);
     // Init MPI & get numprocs and rank
     //MPI_Init(&argc,&argv);
     //err = MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -321,26 +479,35 @@ int main(int argc, char** argv)
 
     for(t=0; t<TIME; ++t)
     {
-        initBodies(*universe);
+        // Compute diameter and center of universe
         ComputeDTC(universe, center, diameter);
+        // Set root node
+        initNodes(root);
         radius = diameter * 0.5;
+    cout<<"Tree\n";
+        printTree(root,0);
+        // Set root to center of universe  
         for(j=0; j<3; j++)
-            (*universe)->position[i] = center[i];
+            root->position[j] = center[j];
+	
+        // Build Octree
+        for (j = 0; j < NBODIES; ++j) 
+        {
+            cout <<"INSERTING " << j<<endl;
+			insert(root, universe[j], radius); 
+        }
+	
+        // Compute center of mass of the universe
+        ComputeCOM(root);
 
-		for (j = 0; j < NBODIES; ++j) 
-		{
-			insert(universe, bodies[j], radius); 
-		}
+        // Force routines
+        for (i = 0; i < NBODIES; ++i) 
+	       ComputeForceRecursive(*universe, universe[i], forces[i], diameter*diameter);
+        
 
-		ComputeCOM(*universe);
-
-		for (j = 0; j < NBODIES; ++j) 
-		{
-			ComputeForceRecursive(*universe, *forces[j], *bodies[j], diameter, t);
-		}
-        swap = universe;
-        universe = temp;
-        temp = swap;
+        for (i = 0; i < NBODIES; ++i) 
+           Leapfrog(universe[i], forces[i]);
+           
     }
 
 
