@@ -95,13 +95,19 @@ void printBody(Body*& body)
     printf("body %p: %f %f %f %d\n", body, body->position[0], body->position[1], body->position[2], body->mass);
 }
 
-void printTree(Node*& root, int t)
+void printTree(Node*& root, int level)
 {
     int i;
+    printf("level %d at %p: %f %f %f %f\n", level, root, root->position[0], root->position[1], root->position[2], root->mass);
     for(i=0; i<8; i++)
+    {
         if(root->cell.nodes[i] != NULL)
-            //printTree(root->cell.nodes[i], t);
-    printf("time %d, node %p: %f %f %f %f\n", t, root, root->position[0], root->position[1], root->position[2], root->mass);
+        {
+            printf("nodes[%d] %d at %p: %f %f %f %f\n", i, level, root->cell.nodes[i], root->cell.nodes[i]->position[0], root->cell.nodes[i]->position[1], root->cell.nodes[i]->position[2], root->cell.nodes[i]->mass);
+            if(root->cell.nodes[i]->type == 1)
+                printTree(root->cell.nodes[i], ++level);
+        }
+    }
 
 }
 // Read initial data and allocate memory
