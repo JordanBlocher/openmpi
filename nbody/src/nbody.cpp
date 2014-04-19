@@ -79,14 +79,14 @@ void printBodies(Body**& bodies, int t)
 void printNode(Node*& node)
 {
     int i;
-    printf("node %p: %f %f %f %f\n", node, node->position[0], node->position[1], node->position[2], node->mass);
+    printf("node %p type %d: %f %f %f %f\n", node, node->type, node->position[0], node->position[1], node->position[2], node->mass);
     if(node->type == 1)
         for(i=0; i<8; i++)
         {
             if(node->cell.nodes[i] == NULL)
                 printf("node[%d] at %p: \n", i, node->cell.nodes[i]);
             else if(node->cell.nodes[i] != NULL)
-                printf("node[%d] at %p: %f %f %f %f\n", i, node->cell.nodes[i], node->cell.nodes[i]->position[0], node->cell.nodes[i]->position[1], node->cell.nodes[i]->position[2], node->cell.nodes[i]->mass);
+                printf("node[%d] type %d at %p: %f %f %f %f\n", i, node->cell.nodes[i]->type, node->cell.nodes[i], node->cell.nodes[i]->position[0], node->cell.nodes[i]->position[1], node->cell.nodes[i]->position[2], node->cell.nodes[i]->mass);
         }
 }
 
@@ -490,8 +490,7 @@ cout<<"Bodies\n";
         // Set root node
         initNodes(root);
         radius = diameter * 0.5;
-    cout<<"Tree\n";
-        printTree(root,0);
+  
         // Set root to center of universe  
         for(j=0; j<3; j++)
             root->position[j] = center[j];
@@ -502,7 +501,9 @@ cout<<"Bodies\n";
             cout <<"INSERTING " << j<<endl;
 			insert(root, universe[j], radius); 
         }
-	
+	  cout<<"Tree\n";
+        printTree(root,0);
+  
         // Compute center of mass of the universe
         ComputeCOM(root);
 
