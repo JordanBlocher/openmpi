@@ -88,7 +88,6 @@ void printNode(Node*& node)
                 printf("node[%d] type %d at %p: %f %f %f %f\n", i, node->cell.nodes[i]->type, node->cell.nodes[i], node->cell.nodes[i]->position[0], node->cell.nodes[i]->position[1], node->cell.nodes[i]->position[2], node->cell.nodes[i]->mass);
             else
                 printf("node[%d] at %p: \n", i, node->cell.nodes[i]);
-
         }
     }
 }
@@ -513,7 +512,8 @@ int main(int argc, char** argv)
         // Build Octree
         for (j = 0; j < NBODIES; ++j) 
 			insert(root, universe[j], radius); 
-        printTree(root, 0);
+	  cout<<"Tree\n";
+        printTree(root,0);
   
         // Compute center of mass of the universe
         ComputeCOM(root);
