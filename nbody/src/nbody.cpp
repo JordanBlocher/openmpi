@@ -46,7 +46,7 @@ union Cell
 
 struct Node
 {
-    int type;
+    int type = 0;
     float mass;
     float position[3]; // center of mass
     Cell cell;
@@ -81,13 +81,16 @@ void printNode(Node*& node)
     int i;
     printf("node %p type %d: %f %f %f %f\n", node, node->type, node->position[0], node->position[1], node->position[2], node->mass);
     if(node->type == 1)
+    {
         for(i=0; i<8; i++)
         {
-            if(node->cell.nodes[i] == NULL)
-                printf("node[%d] at %p: \n", i, node->cell.nodes[i]);
-            else if(node->cell.nodes[i] != NULL)
+            if(node->cell.nodes[i] != NULL)
                 printf("node[%d] type %d at %p: %f %f %f %f\n", i, node->cell.nodes[i]->type, node->cell.nodes[i], node->cell.nodes[i]->position[0], node->cell.nodes[i]->position[1], node->cell.nodes[i]->position[2], node->cell.nodes[i]->mass);
+            else
+                printf("node[%d] at %p: \n", i, node->cell.nodes[i]);
+
         }
+    }
 }
 
 void printBody(Body*& body)
@@ -103,13 +106,31 @@ void printTree(Node*& root, int level)
     {
         if(root->cell.nodes[i] != NULL)
         {
-            printf("nodes[%d] %d at %p: %f %f %f %f\n", i, level, root->cell.nodes[i], root->cell.nodes[i]->position[0], root->cell.nodes[i]->position[1], root->cell.nodes[i]->position[2], root->cell.nodes[i]->mass);
+            printf("nodes[%d] %d at %p: %f %f %f %f\n", i, root->cell.nodes[i]->type, root->cell.nodes[i], root->cell.nodes[i]->position[0], root->cell.nodes[i]->position[1], root->cell.nodes[i]->position[2], root->cell.nodes[i]->mass);
             if(root->cell.nodes[i]->type == 1)
                 printTree(root->cell.nodes[i], ++level);
         }
+        else
+            printf("nodes[%d] %d at %p:\n", i, level, root->cell.nodes[i]); 
     }
 
 }
+
+void deallocateTree(Node* node) 
+{
+    int i;
+
+	if ((node == NULL) || (node->type == 0))
+		return;
+	else 
+	{
+	    for(i=0; i<8; i++)
+		    deallocateTree(node->cell.nodes[i]);
+
+		free(node);
+	}
+}
+
 // Read initial data and allocate memory
 void readNbodyData(char* file_name, Node**& universe, Body**& bodies, Force**& forces)
 {
@@ -175,7 +196,7 @@ void readNbodyData(char* file_name, Node**& universe, Body**& bodies, Force**& f
 void Leapfrog(Node*& body, Force*& force)
 {
     int j;
-    Node* temp = (Node*)calloc(1, sizeof(Node));
+    Body* temp = (Body*)calloc(1, sizeof( Body ));
     float vminushalf[3], vplushalf[3];
 
         for(j=0; j<3; ++j)
@@ -188,12 +209,12 @@ void Leapfrog(Node*& body, Force*& force)
             // Leapfrog : v(t + 1/2)
             vplushalf[j] = 0.5*(body->cell.body->velocity[j] + force->magnitude[j]/body->mass*DT);
             // v(t)
-            temp->cell.body->velocity[j] = (vplushalf[j] - vminushalf[j])*body->mass*DT;   
+            temp->velocity[j] = (vplushalf[j] - vminushalf[j])*body->mass*DT;   
             // x(t + 1/2)
             temp->position[j] = body->position[j] + body->position[j] * vplushalf[j]*DT;   
             temp->mass = body->mass;
         }
-    body = temp;
+    body->cell.body = temp;
 
     free(temp);
 }
@@ -242,7 +263,7 @@ void ComputeForceRecursive(Node*& system, Node*& body, Force*& force, float d2)
         }
         else // Compute force for local body
         {
-            ComputeForce(system->cell.nodes[j], body, force);
+            ComputeForce(system, body, force);
         }
     }
     else // Compute force approximation for solar system as mass cluster
@@ -286,7 +307,7 @@ void ComputeCOM(Node *&node)
     // Place this node at the center of the system
     m = 1.0 / node->mass;
     for(i=0; i<3; i++)
-        node->position[i] = zeros[i] * m;
+        node->position[i] = tempPosition[i] * m;
     
     free(temp);
 }
@@ -336,10 +357,6 @@ void insert(Node*& system, Node*& node, float r)
     int j, idx1, idx2;
     float rprev;
     Node *temp, *newSystem;
-    cout<<"system\n";
-    printNode(system);
-    cout<<"node\n";
-    printNode(node);
 	do 
     {
 		float d[3];
@@ -354,7 +371,6 @@ void insert(Node*& system, Node*& node, float r)
             }
             else d[j] = 0; // If new system zero is max distance
         }
-    cout<<"idx1 "<<idx1<<endl;
         // We have room, make the node a child 
 		if (system->cell.nodes[idx1] == NULL) 
         {
@@ -364,26 +380,14 @@ void insert(Node*& system, Node*& node, float r)
         // System exists here, don't insert node, go further into the tree
         else if (system->cell.nodes[idx1]->type == 1)
         {
-    cout<<"GO DEEPER\n";
-    cout<<"system\n";
-    printNode(system);
-    cout<<"node\n";
-    printNode(node);
-	
 			r *= 0.5; // Make new system smaller
 			system = system->cell.nodes[idx1];
 		} 
         // Tree is not deep enough, make the current system a branch 
         else 
         {
-    cout<<"BRANCH OUT\n";
-    cout<<"system\n";
-    printNode(system);
-    cout<<"node\n";
-    printNode(node);
-	
 			rprev = 0.5 * r;
-			newSystem = (Node*)calloc(1, sizeof(Node));
+			newSystem = (Node*)calloc(1, sizeof(Node)); // New node as branch root
             initNodes(newSystem);
             for(j=0; j<3; j++)
                 newSystem->position[j] = system->position[j] - rprev + d[j]; 
@@ -391,8 +395,8 @@ void insert(Node*& system, Node*& node, float r)
             for(j=0; j<3; j++)
 			    if (newSystem->position[j] < node->position[j]) 
                     idx2 = (j == 0) ? 1 : (j == 1) ? idx2+2 : idx2+4;
-
-    cout<<"idx2 "<<idx2<<endl;
+            
+            // Swap out crowded node with branch
 			newSystem->cell.nodes[idx2] = node;
 			temp = system->cell.nodes[idx1];
 			system->cell.nodes[idx1] = newSystem;
@@ -468,23 +472,34 @@ int main(int argc, char** argv)
     Force **forces;
     Body **bodies;
     Node *root;
-    root = (Node*)calloc(1, sizeof( Node ));
 
     std::chrono::high_resolution_clock::time_point startclock, stopclock;
     std::chrono::duration<double> time_span;
 
+    // Init MPI & get numprocs and rank
+    MPI_Init(&argc,&argv);
+    err = MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    err = MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
+    CHECKMPI(err); 
+
+    CreateMPIDatatype(); 
+
     std::string filename = "data/init.dat";
     readNbodyData((char*)filename.c_str(), universe, bodies, forces);
-cout<<"Bodies\n";
-    printBodies(bodies, 0);
-    // Init MPI & get numprocs and rank
-    //MPI_Init(&argc,&argv);
-    //err = MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    //err = MPI_Comm_size(MPI_COMM_WORLD, &numprocs);
+
+    printBodies(bodies, -1);
+    cout<<"\n";
+    //MPI_Bcast body pointer array
+    //MPI_Bcast(bodies, NBODIES, MPI_Body, 0, MPI_COMM_WORLD);
     //CHECKMPI(err); 
 
     for(t=0; t<TIME; ++t)
     {
+        cout<<"\nAllocating root\n";
+        root = (Node*)calloc(1, sizeof( Node ));
+        cout<<"\n..root address " <<root<<" ok?\n";
+        printBodies(bodies, t);
+        cout<<"\n";
         // Compute diameter and center of universe
         ComputeDTC(universe, center, diameter);
         // Set root node
@@ -497,24 +512,24 @@ cout<<"Bodies\n";
 	
         // Build Octree
         for (j = 0; j < NBODIES; ++j) 
-        {
-            cout <<"INSERTING " << j<<endl;
 			insert(root, universe[j], radius); 
-        }
-	  cout<<"Tree\n";
-        printTree(root,0);
+        printTree(root, 0);
   
         // Compute center of mass of the universe
         ComputeCOM(root);
 
         // Force routines
         for (i = 0; i < NBODIES; ++i) 
-	       ComputeForceRecursive(*universe, universe[i], forces[i], diameter*diameter);
+	       ComputeForceRecursive(root, universe[i], forces[i], diameter*diameter);
         
+        //MPI_Allgather body pointer array
+        //MPI_Allgather(bodies, NBODIES, MPI_Body, bodies, NBODIES, MPI_Body, MPI_COMM_WORLD);
 
         for (i = 0; i < NBODIES; ++i) 
            Leapfrog(universe[i], forces[i]);
-           
+          
+        // Delete tree
+        deallocateTree(root);
     }
 
 
@@ -526,6 +541,6 @@ cout<<"Bodies\n";
         //printf("\n %d %d %f\n",numprocs, N, (double)time_span.count());
     }
 
-    //MPI_Finalize();
+    MPI_Finalize();
     return 0;
 }
