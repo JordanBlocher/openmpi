@@ -195,23 +195,23 @@ void readNbodyData(char* file_name, Node**& universe, Body**& bodies, Force**& f
 // Leapfrog routine
 void Leapfrog(Node*& body, Force*& force)
 {
-    int j;
+    int j,k;
     Body* temp = (Body*)calloc(1, sizeof( Body ));
     float vminushalf[3], vplushalf[3];
 
         for(j=0; j<3; ++j)
         {
-            for(j=0; j<3; ++j)
+            for(k=0; k<3; ++k)
             {
                 // Leapfrog : v(t - 1/2)
-                vminushalf[j] = body->cell.body->velocity[j];   
+                vminushalf[k] = body->cell.body->velocity[k];   
             }
             // Leapfrog : v(t + 1/2)
             vplushalf[j] = 0.5*(body->cell.body->velocity[j] + force->magnitude[j]/body->mass*DT);
             // v(t)
             temp->velocity[j] = (vplushalf[j] - vminushalf[j])*body->mass*DT;   
             // x(t + 1/2)
-            temp->position[j] = body->position[j] + body->position[j] * vplushalf[j]*DT;   
+            temp->position[j] = body->position[j] + vplushalf[j]*DT;   
             temp->mass = body->mass;
         }
     body->cell.body = temp;
