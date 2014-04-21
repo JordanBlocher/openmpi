@@ -35,12 +35,12 @@ using std::endl;
 
 // global variables
 MPI_Datatype MPI_Body;
+MPI_Datatype MPI_BodyInfo;
+
+int rank, total_nodes;
 
 typedef struct
 {
-    int my_rank;
-    int total_nodes;
-    char input_file_name[STD_STR_LEN];
     int num_simulation_steps;
     float time_difference;
     int num_bodies;
@@ -77,17 +77,17 @@ struct Node
 };
 
 
-void CreateMPIDatatype();
+void CreateMPIDatatypes(int);
 
-int processCommandLineArgs( int argc, char** argv, JobInfo* job_info );
+int processCommandLineArgs( int argc, char** argv, JobInfo* job_info , char *filename);
 
 void computeJobShares( JobInfo* info );
 
-int master( JobInfo* info );
+int master( JobInfo* info, char * filename);
 
-int slave( JobInfo* info );
+int slave( JobInfo* info);
 
-int readNbodyData( JobInfo* info, Body** universe );
+int readNbodyData( JobInfo* info, Body** universe , char *filename);
 
 void transmitProblemParameters( JobInfo* info );
 
@@ -131,12 +131,13 @@ int main( int argc, char** argv )
 
     // do MPI initialization
     MPI_Init( &argc, &argv );
-    MPI_Comm_size( MPI_COMM_WORLD, &(info.total_nodes) );
-    MPI_Comm_rank( MPI_COMM_WORLD, &(info.my_rank) );
-    CreateMPIDatatype();
+    MPI_Comm_size( MPI_COMM_WORLD, &total_nodes );
+    MPI_Comm_rank( MPI_COMM_WORLD, &rank );
+    CreateMPIDatatypes(total_nodes);
 
     // process the command line arguments
-    processCommandLineArgs( argc, argv, &info );
+    char input_file_name[STD_STR_LEN];
+    processCommandLineArgs( argc, argv, &info, input_file_name );
 
 // this will be unnecessary once octree is in place
 computeJobShares( &info );
@@ -146,10 +147,10 @@ computeJobShares( &info );
 
 
     // case: this processor is the master
-    if( info.my_rank == MASTER )
+    if( rank == MASTER )
     {
         // run the master's code
-        master( &info );
+        master( &info, input_file_name);
     }
     // case: this node is not the master
     else
@@ -171,33 +172,62 @@ fflush( stdout );
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
-void CreateMPIDatatype()
+void CreateMPIDatatypes(const int total_nodes)
 {
 
 /*
-    int blocks = 3;
-    
-    MPI_Type_struct( 3,
-// count  // array of blocklengths // array of displacements  // array of types  // newtype )
+    MPI_Type_struct( count  // array of blocklengths // array of displacements  // array of types  // newtype )
+  
+    * BODY TYPE
+    int mass;
+    float position[3];
+    float velocity[3]; 
   */
-
     // Array of datatypes
-    MPI_Datatype type[3] = {  MPI_INT, MPI_FLOAT, MPI_FLOAT };
+    MPI_Datatype bodytype[3] = {  MPI_INT, MPI_FLOAT, MPI_FLOAT };
 
     // Number of each type
-    int block_len[3] = { 1, 3, 3};
+    int body_block_len[3] = { 1, 3, 3};
     
     // Displacements
-    MPI_Aint disp[3] = { 0, sizeof(MPI_INT),
+    MPI_Aint body_disp[3] = { 0, sizeof(MPI_INT),
                          (sizeof(MPI_INT) + (3 * sizeof(MPI_FLOAT))) };
 
     // MPI Body struct
-    MPI_Type_create_struct(3, block_len, disp, type, &MPI_Body);
+    MPI_Type_create_struct(3, body_block_len, body_disp, bodytype, &MPI_Body);
 
     MPI_Type_commit(&MPI_Body);
+
+    /* 
+    * INFO TYPE
+    int num_simulation_steps;
+    float time_difference;
+    int num_bodies;
+    int* start_indices;
+    int* shares_of_bodies;
+    */
+    // Array of datatypes
+    MPI_Datatype infotype[6] = {MPI_INT, MPI_FLOAT, MPI_INT, MPI_INT, MPI_INT };
+
+    // Number of each type
+    int info_block_len[5] = {1, 1, 1, total_nodes, total_nodes};
+    
+    // Displacements
+    MPI_Aint info_disp[5];
+    info_disp[0]= 0; 
+    info_disp[1]= sizeof(MPI_INT); 
+    info_disp[2]= sizeof(MPI_INT) + sizeof(MPI_FLOAT); 
+    info_disp[3]= 2*sizeof(MPI_INT) + sizeof(MPI_FLOAT);
+    info_disp[4]= 2*sizeof(MPI_INT) + sizeof(MPI_FLOAT) + (total_nodes * sizeof(MPI_INT));
+
+    // MPI Body struct
+    MPI_Type_create_struct(5, info_block_len, info_disp, infotype, &MPI_BodyInfo);
+
+    MPI_Type_commit(&MPI_BodyInfo);
+
 }
 
-int processCommandLineArgs( int argc, char** argv, JobInfo* job_info )
+int processCommandLineArgs( int argc, char** argv, JobInfo* job_info, char* filename )
 {
     // variables
     int arg_success = false;
@@ -206,7 +236,14 @@ int processCommandLineArgs( int argc, char** argv, JobInfo* job_info )
     if( argc >= 2 )
     {
         // incorporate the arguments into the program
-        strcpy( job_info->input_file_name, argv[1] );
+        strcpy( filename, argv[1] );
+
+        if( argc >= 5)
+        {
+            job_info->num_bodies = atoi( argv[2] );
+            job_info->num_simulation_steps = atoi( argv[3] );
+            job_info->time_difference = atoi( argv[4] );
+        }
 
         // indicate that arguments were successfully obtained
         arg_success = true;
@@ -228,12 +265,12 @@ void computeJobShares( JobInfo* info )
   int i = 0;
 
   // allocate the row information arrays
-  info->start_indices = (int*) calloc( info->total_nodes, sizeof( int ) );
-  info->shares_of_bodies = (int*) calloc( info->total_nodes, sizeof( int ) );
+  info->start_indices = (int*) calloc( total_nodes, sizeof( int ) );
+  info->shares_of_bodies = (int*) calloc( total_nodes, sizeof( int ) );
 
   // compute the minimum share and the bigger share of the rows
-  minimum_share = info->num_bodies / info->total_nodes;
-  remainder = info->num_bodies % info->total_nodes;
+  minimum_share = info->num_bodies / total_nodes;
+  remainder = info->num_bodies % total_nodes;
   bigger_share = minimum_share + 1;
 
   // distribute the minimum share and the remainder among the low rank nodes
@@ -245,7 +282,7 @@ void computeJobShares( JobInfo* info )
   }
 
   // finish distributing the starting rows and shares
-  for( /* i = whatever it was from last loop */; i < info->total_nodes; i++ )
+  for( /* i = whatever it was from last loop */; i < total_nodes; i++ )
   {
     // allocate the start row and row shares
     info->start_indices[i] = ( i * minimum_share ) + remainder;
@@ -256,7 +293,7 @@ void computeJobShares( JobInfo* info )
 }
 
 
-int master( JobInfo* info )
+int master( JobInfo* info, char *filename)
 {
     // variables
     int job_success = true;
@@ -269,24 +306,28 @@ int master( JobInfo* info )
 printf( "MADE IT TO LINE %d\n", __LINE__ );
 fflush( stdout );
 
-    // read in the file data
-    readNbodyData( info, &universe );
-
-printf( "MADE IT TO LINE %d\n", __LINE__ );
-fflush( stdout );
-
-
     // allocate the arrays appropriately
-    my_bodies = ( Body* ) calloc( info->shares_of_bodies[ info->my_rank ],
+    my_bodies = ( Body* ) calloc( info->shares_of_bodies[ rank ],
                                   sizeof( Body ) );
-    results = ( Body* ) calloc( info->shares_of_bodies[ info->my_rank ],
+    results = ( Body* ) calloc( info->shares_of_bodies[ rank ],
                                 sizeof( Body ) );
 
 printf( "MADE IT TO LINE %d\n", __LINE__ );
 fflush( stdout );
 
+    // read in the file data
+    readNbodyData( info, &universe , filename);
+    
+printf( "MADE IT TO LINE %d\n", __LINE__ );
+fflush( stdout );
+
     // transmit the pertinent problem data to all processes
-    transmitProblemParameters( info );
+    MPI_Bcast( info,           // send buffer
+               1,   // number of items
+               MPI_BodyInfo,           // send type
+               MASTER,             // root
+               MPI_COMM_WORLD );   // communicator
+    //transmitProblemParameters( info );
 
 printf( "MADE IT TO LINE %d\n", __LINE__ );
 fflush( stdout );
@@ -323,7 +364,7 @@ fflush( stdout );
         // collect and share results from all processors
         MPI_Allgatherv(
             results,                            // send buffer
-            info->shares_of_bodies[ info->my_rank ], // send count
+            info->shares_of_bodies[ rank ], // send count
             MPI_Body,                           // send type
             universe,                           // receive buffer
             info->shares_of_bodies,                  // receive counts
@@ -362,9 +403,16 @@ int slave( JobInfo* info )
 
 printf( "SLAVE LINE %d\n", __LINE__ );
 fflush( stdout );
-
+    
     // collect the problem parameters
-    receiveProblemParameters( info );
+    MPI_Bcast( info,           // send buffer
+               1,   // number of items
+               MPI_BodyInfo,           // send type
+               MASTER,             // root
+               MPI_COMM_WORLD );   // communicator
+    //receiveProblemParameters( info );
+    cout<<"info "<<info->num_bodies<<endl;
+    cout<<"sim steps "<< info->num_simulation_steps<<endl;
 
 printf( "SLAVE LINE %d\n", __LINE__ );
 fflush( stdout );
@@ -391,7 +439,6 @@ fflush( stdout );
                MPI_Body,           // send type
                MASTER,             // root
                MPI_COMM_WORLD );   // communicator
-
 printf( "SLAVE LINE %d\n", __LINE__ );
 fflush( stdout );
 
@@ -407,7 +454,7 @@ fflush( stdout );
         // collect and share results from all processors
         MPI_Allgatherv(
             results,                            // send buffer
-            info->shares_of_bodies[ info->my_rank ], // send count
+            info->shares_of_bodies[ rank ], // send count
             MPI_Body,                           // send type
             universe,                           // receive buffer
             info->shares_of_bodies,                  // receive counts
@@ -424,16 +471,16 @@ fflush( stdout );
 }
 
 
-int readNbodyData( JobInfo* info, Body** universe )
+int readNbodyData( JobInfo* info, Body** universe, char *filename)
 {
     // variables 
     int read_success = false;
     FILE* file = NULL;
-    int i = 0, j = 0;
+    int i = 0;
     Body body; // temp for file reading
 
     // open the file
-    file = fopen( info->input_file_name , "r");
+    file = fopen( filename , "r");
 
     // case: the file opened successfully
     if( file != NULL )
@@ -460,7 +507,7 @@ int readNbodyData( JobInfo* info, Body** universe )
             fscanf( file, "%d", &(body.mass) );
 
             // store the newly read in body
-            bodyCopy( &(body), &((*universe)[i]) ); 
+            bodyCopy( &((*universe)[i]), &body ); 
         }
 
         // indicate that the file was successfully read
@@ -484,14 +531,10 @@ void transmitProblemParameters( JobInfo* info )
     int i = 0;
 
     // send each of the pertinent items to each processor
-    for( i = 1; i < info->total_nodes; i++ )
+    for( i = 1; i < total_nodes; i++ )
     {
         // send the items
-        MPI_Send( &(info->num_bodies), 1, MPI_INT, i, ARBITRARY_TAG,
-                  MPI_COMM_WORLD );
-        MPI_Send( &(info->num_simulation_steps), 1, MPI_INT, i, ARBITRARY_TAG,
-                  MPI_COMM_WORLD );
-        MPI_Send( &(info->time_difference), 1, MPI_FLOAT, i, ARBITRARY_TAG,
+        MPI_Send( &info, 1, MPI_BodyInfo, i, ARBITRARY_TAG,
                   MPI_COMM_WORLD );
     }
 }
@@ -502,24 +545,23 @@ void receiveProblemParameters( JobInfo* info )
     // variables
     MPI_Status status;
 
+    cout<<info->num_bodies<<endl;
     // receive the items
-    MPI_Recv( &(info->num_bodies), 1, MPI_INT, MASTER, MPI_ANY_TAG,
+    MPI_Recv( &info, 1, MPI_BodyInfo, MASTER, MPI_ANY_TAG,
               MPI_COMM_WORLD, &status );
-    MPI_Recv( &(info->num_simulation_steps), 1, MPI_INT, MASTER, MPI_ANY_TAG,
-              MPI_COMM_WORLD, &status );
-    MPI_Recv( &(info->time_difference), 1, MPI_FLOAT, MASTER, MPI_ANY_TAG,
-              MPI_COMM_WORLD, &status );    
 }
 
 
 void allocateArrays( JobInfo* info, Body** universe, Body** my_bodies,
                      Body** results )
 {
+    cout<<"numbodies "<<info->num_bodies<<endl;
+    cout<<"shares "<<info->shares_of_bodies[rank]<<endl;
     // allocate the arrays as necessary
     *universe = ( Body* ) calloc( info->num_bodies, sizeof( Body ) );
-    *my_bodies = ( Body* ) calloc( info->shares_of_bodies[ info->my_rank ],
+    *my_bodies = ( Body* ) calloc( info->shares_of_bodies[ rank ],
                                    sizeof( Body ) );
-    *results = ( Body* ) calloc( info->shares_of_bodies[ info->my_rank ],
+    *results = ( Body* ) calloc( info->shares_of_bodies[ rank ],
                                  sizeof( Body ) );
 }
 
@@ -541,10 +583,10 @@ void loadMyBodies( Body* my_bodies, Body* universe, JobInfo* info )
 
     // simply copy the bodies from the universe into this node's body set
     // using appropriate offsets
-    for( i = 0; i < info->shares_of_bodies[ info->my_rank ]; i++ )
+    for( i = 0; i < info->shares_of_bodies[ rank ]; i++ )
     {
         bodyCopy( &(my_bodies[i]),
-                  &(universe[ i + info->start_indices[ info->my_rank ] ]) );
+                  &(universe[ i + info->start_indices[ rank ] ]) );
     }
 
     // The array of bodies for this node is returned by reference
@@ -579,10 +621,10 @@ void performComputations( Body* results, Body* my_bodies, Body* universe,
     int j = 0;
 
     // for each of the bodies
-    for( i = 0; i < info->shares_of_bodies[ info->my_rank ]; i++ )
+    for( i = 0; i < info->shares_of_bodies[ rank ]; i++ )
     {
         // case: the "reference" and "other" bodies are the same
-        if( i == ( j - info->start_indices[ info->my_rank ] ) )
+        if( i == ( j - info->start_indices[ rank ] ) )
         {
             // skip this computation
             continue;
@@ -653,9 +695,6 @@ void addTo3dForce( Force* resulting_force, Body* reference_body,
 void createResultingBody( Body* result_body, Body* original_body,
                           Force* cumulative_force )
 {
-    // variables
-    int i = 0;
-
     // set up the masses of the result body
     result_body->mass = original_body->mass;
 
@@ -721,13 +760,11 @@ void outputPerformanceSummary( JobInfo* info, float total_simulation_time )
    Time Step Magnitude (s), Total Time to Compute Simulation (s),
    Name of File Data Was From
  */
-    printf( "%d, %d, %d, %E, %E, %s\r\n",
-            info->total_nodes,
+    printf( "%d, %d, %E, %E, \r\n",
             info->num_bodies,
             info->num_simulation_steps,
             info->time_difference,
-            total_simulation_time,
-            info->input_file_name );
+            total_simulation_time);
 
     // no return - void
 }
