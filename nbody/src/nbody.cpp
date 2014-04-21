@@ -15,8 +15,8 @@ using std::cout;
 using std::endl;
 
 #define TIME_DIFFERENCE 0.0003
-#define G 6.67384e-2  // Factor all values by 1 billion
-#define DT 100 // Big time step so to see movement
+#define G 1.00 //6.67384e-2  // Factor all values by 1 billion
+#define DT 1.00 // // Big time step so to see movement
 
 int TIME, NBODIES;
 float zeros[3] = {0, 0, 0};
@@ -47,13 +47,13 @@ union Cell
 struct Node
 {
     int type = 0;
-    float mass;
+    int mass;
     float position[3]; // center of mass
     Cell cell;
 };
 
 // Create new tree branch helper function
-void initNodes(Node*& universe)
+void initNodes(Node *universe)
 {
     universe->type = 1;
     universe->mass = 0;
@@ -68,54 +68,55 @@ void initNodes(Node*& universe)
 
 }
 
-void printBodies(Body**& bodies, int t)
-{
-    int i;
-    for(i=0; i<NBODIES; ++i)
-        printf("time %d, node %p: %f %f %f %d\n", t, bodies[i], bodies[i]->position[0], bodies[i]->position[1], bodies[i]->position[2], bodies[i]->mass);
-
-}
-
-void printNode(Node*& node)
-{
-    int i;
-    printf("node %p type %d: %f %f %f %f\n", node, node->type, node->position[0], node->position[1], node->position[2], node->mass);
-    if(node->type == 1)
-    {
-        for(i=0; i<8; i++)
-        {
-            if(node->cell.nodes[i] != NULL)
-                printf("node[%d] type %d at %p: %f %f %f %f\n", i, node->cell.nodes[i]->type, node->cell.nodes[i], node->cell.nodes[i]->position[0], node->cell.nodes[i]->position[1], node->cell.nodes[i]->position[2], node->cell.nodes[i]->mass);
-            else
-                printf("node[%d] at %p: \n", i, node->cell.nodes[i]);
-        }
-    }
-}
-
-void printBody(Body*& body)
+void printBody(Body *body)
 {
     printf("body %p: %f %f %f %d\n", body, body->position[0], body->position[1], body->position[2], body->mass);
 }
 
-void printTree(Node*& root, int level)
+void printBodies(Body *&bodies, int t)
 {
     int i;
-    printf("level %d at %p: %f %f %f %f\n", level, root, root->position[0], root->position[1], root->position[2], root->mass);
-    for(i=0; i<8; i++)
+    for(i=0; i<NBODIES; ++i)
     {
-        if(root->cell.nodes[i] != NULL)
-        {
-            printf("nodes[%d] %d at %p: %f %f %f %f\n", i, root->cell.nodes[i]->type, root->cell.nodes[i], root->cell.nodes[i]->position[0], root->cell.nodes[i]->position[1], root->cell.nodes[i]->position[2], root->cell.nodes[i]->mass);
-            if(root->cell.nodes[i]->type == 1)
-                printTree(root->cell.nodes[i], ++level);
-        }
-        else
-            printf("nodes[%d] %d at %p:\n", i, level, root->cell.nodes[i]); 
+        printf("time %d\n", t);
+        printBody(&bodies[i]);
     }
 
 }
 
-void deallocateTree(Node* node) 
+void printUniverse(Node **&universe, int t)
+{
+    int i;
+    for(i=0; i<NBODIES; ++i)
+    {
+        printf("time %d\n", t);
+        printBody(universe[i]->cell.body);
+    }
+
+}
+
+void printTree(Node *root, int level)
+{
+    int i;
+    printf("level %d type %d at %p: %f %f %f %d\n", level, root->type, root, root->position[0], root->position[1], root->position[2], root->mass);
+    if(root->type == 0)
+        printBody(root->cell.body);
+    else if(root->type == 1)
+    { 
+        for(i=0; i<8; i++)
+        {
+            if(root->cell.nodes[i] != NULL)
+            {
+                printf("nodes[%d] type %d at %p: %f %f %f %d\n", i, root->cell.nodes[i]->type, &(root->cell.nodes[i]), root->cell.nodes[i]->position[0], root->cell.nodes[i]->position[1], root->cell.nodes[i]->position[2], root->cell.nodes[i]->mass);
+                if(root->cell.nodes[i]->type == 1)
+                    printTree(&(*root->cell.nodes[i]), ++level);
+            }
+        }
+    }
+
+}
+
+void deallocateTree(Node *node) 
 {
     int i;
 
@@ -131,12 +132,12 @@ void deallocateTree(Node* node)
 }
 
 // Read initial data and allocate memory
-void readNbodyData(char* file_name, Node**& universe, Body**& bodies, Force**& forces)
+void readNbodyData(char* file_name, Node**& universe, Body*& bodies, Force*& forces)
 {
     // variables 
     FILE* file = NULL;
     int i, j;
-    Body *body;
+    Body* body;
 
     // open the file
     file = fopen( file_name , "r");
@@ -146,22 +147,17 @@ void readNbodyData(char* file_name, Node**& universe, Body**& bodies, Force**& f
 
     // allocate the array to contain pointers to all of the bodies
     universe = (Node**)calloc( NBODIES, sizeof( Node* ) );
-    forces = (Force**)calloc( NBODIES, sizeof( Force* ) );
-    bodies = (Body**)calloc( NBODIES, sizeof( Body* ) );
-    for( i = 0; i < NBODIES; i++ )
-    {
-        // allocate the bodies themselves
-        universe[i] = (Node*)calloc( 1, sizeof( Node ) );
-        // allocate memory for forces
-        forces[i] = (Force*)calloc( 1, sizeof( Force ) );
-        memcpy(forces[i]->magnitude, zeros, 3*sizeof(float));
-    }
+    forces = (Force*)calloc( NBODIES, sizeof( Force ) );
+    bodies = (Body*)calloc( NBODIES, sizeof( Body ) );
 
     // read in all body information
     for( i = 0; i < NBODIES; ++i )
     {
+        universe[i] = (Node*)calloc( NBODIES, sizeof( Node ) );
+        memcpy(forces[i].magnitude, zeros, 3*sizeof(float));
+
         // Temp body to allow same pointer in tree and array
-        body = (Body*)calloc( NBODIES, sizeof( Body ) );
+        body = (Body*)calloc(1, sizeof( Body ) );
 
         universe[i]->type = 0;
         // read in the body's position as a spacial coordinate triple
@@ -175,15 +171,14 @@ void readNbodyData(char* file_name, Node**& universe, Body**& bodies, Force**& f
         // read in the mass value
         fscanf( file, "%d", &(body->mass) );
 
-        // Bodies are stored as pointers in pointer array for message-passing
-        bodies[i] = body; 
+        bodies[i] = *body; 
 
         // Body pointer also stored in universe for binary space recursion
         universe[i]->type = 0;
-        universe[i]->cell.body = bodies[i];
-        universe[i]->mass = bodies[i]->mass;
+        universe[i]->cell.body = &bodies[i];
+        universe[i]->mass = universe[i]->cell.body->mass;
         for(j=0; j<3; j++)
-            universe[i]->position[j] = bodies[i]->position[j];
+            universe[i]->position[j] = universe[i]->cell.body->position[j];
     }
 
     free(body);
@@ -192,37 +187,36 @@ void readNbodyData(char* file_name, Node**& universe, Body**& bodies, Force**& f
 }
 
 // Leapfrog routine
-void Leapfrog(Node*& body, Force*& force)
+void Leapfrog(Node *body, Force *force)
 {
-    int j;
-    Body* temp = (Body*)calloc(1, sizeof( Body ));
+    int j,k;
+    Body* temp = body->cell.body;
     float vminushalf[3], vplushalf[3];
-
-        for(j=0; j<3; ++j)
+    
+    for(j=0; j<3; ++j)
+    {
+        for(k=0; k<3; ++k)
         {
-            for(j=0; j<3; ++j)
-            {
-                // Leapfrog : v(t - 1/2)
-                vminushalf[j] = body->cell.body->velocity[j];   
-            }
-            // Leapfrog : v(t + 1/2)
-            vplushalf[j] = 0.5*(body->cell.body->velocity[j] + force->magnitude[j]/body->mass*DT);
-            // v(t)
-            temp->velocity[j] = (vplushalf[j] - vminushalf[j])*body->mass*DT;   
-            // x(t + 1/2)
-            temp->position[j] = body->position[j] + body->position[j] * vplushalf[j]*DT;   
-            temp->mass = body->mass;
+            // Leapfrog : v(t - 1/2)
+            vminushalf[k] = body->cell.body->velocity[k];   
         }
-    body->cell.body = temp;
-
-    free(temp);
+        // Leapfrog : v(t + 1/2)
+        vplushalf[j] = 0.5*(body->cell.body->velocity[j] + force->magnitude[j]/body->mass*DT);
+        // v(t)
+        temp->velocity[j] = (vplushalf[j] - vminushalf[j])*body->cell.body->mass*DT;   
+        // x(t + 1/2)
+        temp->position[j] = body->cell.body->position[j] + vplushalf[j]*DT;   
+        temp->mass = body->cell.body->mass;
+    }
+    
 }
 
 // Force routine
-void ComputeForce(Node*& mi, Node*& mj, Force*& force) 
+void F(Node *mi, Node *mj, Force *force)
 {
     int k;
     float d, r2, r[3], reciprocalForce;
+
     // Compute actions of body i on the universe
     r2 = 0;
     for(k=0; k<3; k++)
@@ -230,15 +224,17 @@ void ComputeForce(Node*& mi, Node*& mj, Force*& force)
         r[k] = mi->position[k] - mj->position[k]; //rx, ry, rz
         r2 += r[k]*r[k]; // r*r
     }
+
     d  = sqrt((double) r2); // distance = sqrt(rx2 + ry2 + rz2)
     // F = G*mj*mi/r*r (gravitational force between body i & j)
     reciprocalForce = G * mi->mass * mj->mass/ r2;
+    
     for(k=0; k<3; k++)
-        force->magnitude[k] = reciprocalForce * r[k]/d; // Action of body i on body j
+        force->magnitude[k] += reciprocalForce * r[k]/d; // Action of body i on body j
 }
 
 // Recursive tree force computation
-void ComputeForceRecursive(Node*& system, Node*& body, Force*& force, float d2)
+void ComputeForceRecursive(Node *system, Node *body, Force *force, float d2)
 {
     int j;
     float r[3], r2=0;
@@ -256,23 +252,35 @@ void ComputeForceRecursive(Node*& system, Node*& body, Force*& force, float d2)
             for(j=0; j<8; ++j)
             {
                 if(system->cell.nodes[j] != NULL)
-                    ComputeForceRecursive(system->cell.nodes[j], body, force, d2);
+                    ComputeForceRecursive(&(*system->cell.nodes[j]), &(*body), &(*force), d2);
                 else continue;
             }
         }
-        else // Compute force for local body
+        else if (system != body)// Compute force for local body
         {
-            ComputeForce(system, body, force);
+            F(&(*system), &(*body), &(*force));
         }
     }
     else // Compute force approximation for solar system as mass cluster
     {
-        ComputeForce(system, body, force);
+        F(&(*system), &(*body), &(*force));
     }
 }
 
+// Recursive Sum
+void ComputeForce(Node *system, Node *body, Force *force, float d2) 
+{
+    int k;
+
+    for(k=0; k<3; k++)
+        force->magnitude[k] = 0;
+
+    ComputeForceRecursive(&(*system), &(*body), &(*force), d2);
+}
+
+
 // Compute center of mass of tree or branch
-void ComputeCOM(Node *&node) 
+void ComputeCOM(Node *node) 
 {
     int m = 0;
     float tempPosition[3] = {0, 0, 0};
@@ -312,7 +320,7 @@ void ComputeCOM(Node *&node)
 }
 
 // Compute diameter of node and center
-void ComputeDTC(Node**& universe, float* center, float &diameter) // compute distance to center
+void ComputeDTC(Node**& universe, float *center, float &diameter) // compute distance to center
 {
     float min[3] = { 1.0e6, 1.0e6, 1.0e6 };
     float max[3] = { -1.0e6, -1.0e6, -1.0e6 }; 
@@ -350,15 +358,14 @@ void ComputeDTC(Node**& universe, float* center, float &diameter) // compute dis
 
 }
 
-void insert(Node*& system, Node*& node, float r) 
+void insert(Node *system, Node *node, float r) 
 {
 	bool finished = false;
     int j, idx1, idx2;
     float rprev;
-    Node *temp, *newSystem;
 	do 
     {
-		float d[3];
+		float d[3] = {0, 0, 0};
         idx1=0;
         for(j=0; j<3; j++)
         {
@@ -368,7 +375,6 @@ void insert(Node*& system, Node*& node, float r)
                 idx1 = (j == 0) ? 1 : (j == 1) ? idx1+2 : idx1+4;
                 d[j] = r; // Set maximum distance to be in system
             }
-            else d[j] = 0; // If new system zero is max distance
         }
         // We have room, make the node a child 
 		if (system->cell.nodes[idx1] == NULL) 
@@ -386,7 +392,7 @@ void insert(Node*& system, Node*& node, float r)
         else 
         {
 			rprev = 0.5 * r;
-			newSystem = (Node*)calloc(1, sizeof(Node)); // New node as branch root
+			Node *newSystem = (Node*)calloc(1, sizeof(Node)); // New node as branch root
             initNodes(newSystem);
             for(j=0; j<3; j++)
                 newSystem->position[j] = system->position[j] - rprev + d[j]; 
@@ -397,7 +403,7 @@ void insert(Node*& system, Node*& node, float r)
             
             // Swap out crowded node with branch
 			newSystem->cell.nodes[idx2] = node;
-			temp = system->cell.nodes[idx1];
+			Node *temp = &(*system->cell.nodes[idx1]);
 			system->cell.nodes[idx1] = newSystem;
 			system = newSystem;
 			node = temp;
@@ -437,7 +443,7 @@ void CreateMPIDatatype()
 }
 
 // Print state of universe
-void printBodiesToFile(Body**& bodies, int t)
+void printBodiesToFile(Body*& bodies, int t)
 {
     int i;
     FILE* file = NULL;
@@ -445,11 +451,10 @@ void printBodiesToFile(Body**& bodies, int t)
     ss << "data/state" << t << ".dat";
     file = fopen(ss.str().c_str(), "w");
     for(i=0; i<NBODIES; ++i)
-        fprintf( file, "%f %f %f %d\n", bodies[i]->position[0], bodies[i]->position[1], bodies[i]->position[2], bodies[i]->mass);
+        fprintf( file, "%f %f %f %d\n", bodies[i].position[0], bodies[i].position[1], bodies[i].position[2], bodies[i].mass);
     ss.str("");
 
 }
-
 
 
 void updateBodies()
@@ -468,8 +473,8 @@ int main(int argc, char** argv)
     int i, j, t, err;
     float center[3], diameter=0, radius=0;;
     Node **universe;
-    Force **forces;
-    Body **bodies;
+    Force *forces;
+    Body *bodies;
     Node *root;
 
     std::chrono::high_resolution_clock::time_point startclock, stopclock;
@@ -486,19 +491,21 @@ int main(int argc, char** argv)
     std::string filename = "data/init.dat";
     readNbodyData((char*)filename.c_str(), universe, bodies, forces);
 
-    printBodies(bodies, -1);
-    cout<<"\n";
     //MPI_Bcast body pointer array
     //MPI_Bcast(bodies, NBODIES, MPI_Body, 0, MPI_COMM_WORLD);
     //CHECKMPI(err); 
 
     for(t=0; t<TIME; ++t)
     {
-        cout<<"\nAllocating root\n";
         root = (Node*)calloc(1, sizeof( Node ));
-        cout<<"\n..root address " <<root<<" ok?\n";
+        cout<<"Bodies\n";
         printBodies(bodies, t);
-        cout<<"\n";
+        cout<<"\n\n";
+
+        cout<<"Universe\n";
+        printUniverse(universe, t);
+        cout<<"\n\n";
+
         // Compute diameter and center of universe
         ComputeDTC(universe, center, diameter);
         // Set root node
@@ -514,19 +521,20 @@ int main(int argc, char** argv)
 			insert(root, universe[j], radius); 
 	  cout<<"Tree\n";
         printTree(root,0);
+        cout<<"\n\n";
   
         // Compute center of mass of the universe
-        ComputeCOM(root);
+        ComputeCOM(&(*root));
 
         // Force routines
         for (i = 0; i < NBODIES; ++i) 
-	       ComputeForceRecursive(root, universe[i], forces[i], diameter*diameter);
+	       ComputeForce(&(*root), &(*universe[i]), &(forces[i]), diameter*diameter);
         
         //MPI_Allgather body pointer array
         //MPI_Allgather(bodies, NBODIES, MPI_Body, bodies, NBODIES, MPI_Body, MPI_COMM_WORLD);
 
         for (i = 0; i < NBODIES; ++i) 
-           Leapfrog(universe[i], forces[i]);
+           Leapfrog(&(*universe[i]), &(forces[i]));
           
         // Delete tree
         deallocateTree(root);
