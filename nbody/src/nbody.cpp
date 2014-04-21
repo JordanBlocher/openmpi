@@ -11,8 +11,8 @@ using std::cout;
 using std::endl;
 
 #define TIME_DIFFERENCE 0.0003
-#define G 6.67384e-2  // Factor all values by 1 billion
-#define DT 100 // Big time step so to see movement
+#define G 1.0 //6.67384e-2  // Factor all values by 1 billion
+#define DT 1.0 // Big time step so to see movement
 
 int TIME, NBODIES;
 float zeros[3] = {0, 0, 0};
@@ -115,7 +115,7 @@ int main(int argc, char** argv)
     }
  
     TIME = atoi(argv[1]);
-    int i, j, t;
+    int i, j, k, t;
     float vminushalf[3], vplushalf[3];
     Body **universe, **temp, **swap;
     Force **forces;
@@ -146,10 +146,10 @@ int main(int argc, char** argv)
         {
              for(j=0; j<3; ++j)
             {
-                for(j=0; j<3; ++j)
+                for(k=0; k<3; ++k)
                 {
                     // Leapfrog : v(t - 1/2)
-                    vminushalf[j] = universe[i]->velocity[j];   
+                    vminushalf[k] = universe[i]->velocity[k];   
                 }
                 // Leapfrog : v(t + 1/2)
                 vplushalf[j] = 0.5*(universe[i]->velocity[j] + forces[i]->magnitude[j]/universe[i]->mass*DT);
@@ -157,7 +157,7 @@ int main(int argc, char** argv)
                 temp[i]->velocity[j] = (vplushalf[j] - vminushalf[j])*universe[i]->mass*DT;   
                 //temp[i]->velocity[j] = universe[i]->velocity[j] + forces[i]->magnitude[j]*DT/(float)universe[i]->mass;   
                 // x(t + 1/2)
-                temp[i]->position[j] = universe[i]->position[j] + universe[i]->position[j] * vplushalf[j]*DT;   
+                temp[i]->position[j] = universe[i]->position[j] + vplushalf[j]*DT;   
                 //temp[i]->position[j] = universe[i]->position[j] + temp[i]->velocity[j]*DT;   
                 temp[i]->mass = universe[i]->mass;
             }
