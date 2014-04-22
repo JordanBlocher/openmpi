@@ -46,7 +46,7 @@ union Cell
 
 struct Node
 {
-    int type = 0;
+    int type;
     int mass;
     float position[3]; // center of mass
     Cell cell;
@@ -73,23 +73,21 @@ void printBody(Body *body)
     printf("body %p: %f %f %f %d\n", body, body->position[0], body->position[1], body->position[2], body->mass);
 }
 
-void printBodies(Body *&bodies, int t)
+void printBodies(Body *&bodies, int)
 {
     int i;
     for(i=0; i<NBODIES; ++i)
     {
-        printf("time %d\n", t);
         printBody(&bodies[i]);
     }
 
 }
 
-void printUniverse(Node **&universe, int t)
+void printUniverse(Node **&universe, int)
 {
     int i;
     for(i=0; i<NBODIES; ++i)
     {
-        printf("time %d\n", t);
         printBody(universe[i]->cell.body);
     }
 
@@ -127,7 +125,7 @@ void deallocateTree(Node *node)
 	    for(i=0; i<8; i++)
 		    deallocateTree(node->cell.nodes[i]);
 
-		free(node);
+		//free(node);
 	}
 }
 
@@ -181,7 +179,6 @@ void readNbodyData(char* file_name, Node**& universe, Body*& bodies, Force*& for
             universe[i]->position[j] = universe[i]->cell.body->position[j];
     }
 
-    free(body);
     // return the universe array by reference
     // (note: we are not error checking for production efficiency)
 }
@@ -315,8 +312,6 @@ void ComputeCOM(Node *node)
     m = 1.0 / node->mass;
     for(i=0; i<3; i++)
         node->position[i] = tempPosition[i] * m;
-    
-    free(temp);
 }
 
 // Compute diameter of node and center
@@ -360,56 +355,59 @@ void ComputeDTC(Node**& universe, float *center, float &diameter) // compute dis
 
 void insert(Node *system, Node *node, float r) 
 {
-	bool finished = false;
     int j, idx1, idx2;
     float rprev;
-	do 
+    Node *newSystem, *temp;
+    float d[3] = {0, 0, 0};
+    idx1=0;
+    printf("System %p \n", system);
+    printf("Node %p pos %f %f %f\n", node, node->position[0],node->position[1],node->position[2]);
+    for(j=0; j<3; j++)
     {
-		float d[3] = {0, 0, 0};
-        idx1=0;
-        for(j=0; j<3; j++)
+        if (system->position[j] < node->position[j]) 
         {
-            if (system->position[j] < node->position[j]) 
-            {
-                // Part of tree algorithm, why?? A bit confused here, compute the index where the new node goes 
-                idx1 = (j == 0) ? 1 : (j == 1) ? idx1+2 : idx1+4;
-                d[j] = r; // Set maximum distance to be in system
-            }
+            // Part of tree algorithm, why?? A bit confused here, compute the index where the new node goes 
+            idx1 = (j == 0) ? 1 : (j == 1) ? idx1+2 : idx1+4;
+            d[j] = r; // Set maximum distance to be in system
         }
-        // We have room, make the node a child 
-		if (system->cell.nodes[idx1] == NULL) 
-        {
-			system->cell.nodes[idx1] = node;
-			finished = true;
-		} 
-        // System exists here, don't insert node, go further into the tree
-        else if (system->cell.nodes[idx1]->type == 1)
-        {
-			r *= 0.5; // Make new system smaller
-			system = system->cell.nodes[idx1];
-		} 
-        // Tree is not deep enough, make the current system a branch 
-        else 
-        {
-			rprev = 0.5 * r;
-			Node *newSystem = (Node*)calloc(1, sizeof(Node)); // New node as branch root
-            initNodes(newSystem);
-            for(j=0; j<3; j++)
-                newSystem->position[j] = system->position[j] - rprev + d[j]; 
-            idx2 = 0;
-            for(j=0; j<3; j++)
-			    if (newSystem->position[j] < node->position[j]) 
-                    idx2 = (j == 0) ? 1 : (j == 1) ? idx2+2 : idx2+4;
-            
-            // Swap out crowded node with branch
-			newSystem->cell.nodes[idx2] = node;
-			Node *temp = &(*system->cell.nodes[idx1]);
-			system->cell.nodes[idx1] = newSystem;
-			system = newSystem;
-			node = temp;
-			r = rprev;
-		}
-	} while (!finished);
+    }
+    // We have room, make the node a child 
+    if (system->cell.nodes[idx1] == NULL) 
+    {
+        system->cell.nodes[idx1] = node;
+        return;
+    } 
+    // System exists here, don't insert node, go further into the tree
+    else if (system->cell.nodes[idx1]->type == 1)
+    {
+        printf("%p type %d idx %d\n", system->cell.nodes[idx1],system->cell.nodes[idx1]->type,idx1);
+        insert(&(*system->cell.nodes[idx1]), &(*node), r * 0.5);
+    } 
+    // Tree is not deep enough, make the current system a branch 
+    else 
+    {
+        rprev = 0.5 * r;
+        newSystem = (Node*)calloc(1, sizeof(Node)); // New node as branch root
+        initNodes(newSystem);
+        for(j=0; j<3; j++)
+            newSystem->position[j] = system->position[j] - rprev + d[j]; 
+        //printf("oldSys pos %f %f %f\n", system->position[0],system->position[1],system->position[2]);
+        //printf("newSys pos %f %f %f\n", newSystem->position[0],newSystem->position[1],newSystem->position[2]);
+        //printf("node pos %f %f %f\n", node->position[0],node->position[1],node->position[2]);
+        idx2 = 0;
+        for(j=0; j<3; j++)
+            if (newSystem->position[j] < node->position[j]) 
+                idx2 = (j == 0) ? 1 : (j == 1) ? idx2+2 : idx2+4;
+        
+        // Swap out crowded node with branch
+        newSystem->cell.nodes[idx2] = node;
+        temp = &(*system->cell.nodes[idx1]);
+        system->cell.nodes[idx1] = newSystem;
+        node = temp;
+        printf("new system %p\n", newSystem);
+        printf("Branched node %p \n", system->cell.nodes[idx1]);
+        insert(&(*newSystem), &(*temp), rprev);
+    }
 }
 
 // Create Body type for message-passing
@@ -526,6 +524,10 @@ int main(int argc, char** argv)
         // Compute center of mass of the universe
         ComputeCOM(&(*root));
 
+        cout<<"Universe after build\n";
+        printUniverse(universe, t);
+        cout<<"\n\n";
+
         // Force routines
         for (i = 0; i < NBODIES; ++i) 
 	       ComputeForce(&(*root), &(*universe[i]), &(forces[i]), diameter*diameter);
@@ -533,11 +535,13 @@ int main(int argc, char** argv)
         //MPI_Allgather body pointer array
         //MPI_Allgather(bodies, NBODIES, MPI_Body, bodies, NBODIES, MPI_Body, MPI_COMM_WORLD);
 
+        cout<<"Universe\n";
+        printUniverse(universe, t);
+        cout<<"\n\n";
+
         for (i = 0; i < NBODIES; ++i) 
            Leapfrog(&(*universe[i]), &(forces[i]));
           
-        // Delete tree
-        deallocateTree(root);
     }
 
 
