@@ -114,21 +114,6 @@ void printTree(Node *root, int level)
 
 }
 
-void deallocateTree(Node *node) 
-{
-    int i;
-
-	if ((node == NULL) || (node->type == 0))
-		return;
-	else 
-	{
-	    for(i=0; i<8; i++)
-		    deallocateTree(node->cell.nodes[i]);
-
-		//free(node);
-	}
-}
-
 // Read initial data and allocate memory
 void readNbodyData(char* file_name, Node**& universe, Body*& bodies, Force*& forces)
 {
@@ -360,8 +345,8 @@ void insert(Node *system, Node *node, float r)
     Node *newSystem, *temp;
     float d[3] = {0, 0, 0};
     idx1=0;
-    printf("System %p \n", system);
-    printf("Node %p pos %f %f %f\n", node, node->position[0],node->position[1],node->position[2]);
+    //printf("System %p \n", system);
+    //printf("Node %p pos %f %f %f\n", node, node->position[0],node->position[1],node->position[2]);
     for(j=0; j<3; j++)
     {
         if (system->position[j] < node->position[j]) 
@@ -380,7 +365,7 @@ void insert(Node *system, Node *node, float r)
     // System exists here, don't insert node, go further into the tree
     else if (system->cell.nodes[idx1]->type == 1)
     {
-        printf("%p type %d idx %d\n", system->cell.nodes[idx1],system->cell.nodes[idx1]->type,idx1);
+        //printf("%p type %d idx %d\n", system->cell.nodes[idx1],system->cell.nodes[idx1]->type,idx1);
         insert(&(*system->cell.nodes[idx1]), &(*node), r * 0.5);
     } 
     // Tree is not deep enough, make the current system a branch 
@@ -404,8 +389,8 @@ void insert(Node *system, Node *node, float r)
         temp = &(*system->cell.nodes[idx1]);
         system->cell.nodes[idx1] = newSystem;
         node = temp;
-        printf("new system %p\n", newSystem);
-        printf("Branched node %p \n", system->cell.nodes[idx1]);
+        //printf("new system %p\n", newSystem);
+        //printf("Branched node %p \n", system->cell.nodes[idx1]);
         insert(&(*newSystem), &(*temp), rprev);
     }
 }
@@ -414,29 +399,14 @@ void insert(Node *system, Node *node, float r)
 void CreateMPIDatatype()
 {
     // Array of datatypes
-    MPI_Datatype type[5] = { MPI_LB, MPI_INT, MPI_FLOAT, MPI_FLOAT, MPI_UB };
+    MPI_Datatype type[3] = {  MPI_FLOAT, MPI_FLOAT, MPI_FLOAT };
     // Number of each type
-    int block_len[5] = {1, 1, 3, 3, 1};
-    
+    int block_len[3] = { 1, 3, 3 };
     // Displacements
-    MPI_Aint disp[5];
-    Body body[2]; // <-- used to calculate displacement to next body
-
-    // MPI gets addresses for displacement in memory buffer
-    MPI_Get_address(&body[0], &disp[0]);
-    MPI_Get_address(&(body[0].mass), &disp[1]);
-    MPI_Get_address(&(body[0].position), &disp[2]);
-    MPI_Get_address(&(body[0].velocity), &disp[3]);
-    MPI_Get_address(&(body[1].velocity), &disp[4]);
-
-    disp[1] = disp[1] - disp[0];
-    disp[2] = disp[2] - disp[0];
-    disp[3] = disp[3] - disp[0];
-    disp[4] = disp[4] - disp[0];
-
+    MPI_Aint disp[3] = { 0, sizeof(float),
+                         ( 4 * sizeof(float) ) };
     // MPI Body struct
-    MPI_Type_create_struct(5, block_len, disp, type, &MPI_Body);
-
+    MPI_Type_create_struct(3, block_len, disp, type, &MPI_Body);
     MPI_Type_commit(&MPI_Body);
 }
 
@@ -454,16 +424,11 @@ void printBodiesToFile(Body*& bodies, int t)
 
 }
 
-
-void updateBodies()
-{
-}
-
 int main(int argc, char** argv)
 {
-    if(argc < 2) 
+    if(argc < 3) 
     {
-        cout <<" Usage: nbody <time>\n\n";
+        cout <<" Usage: nbody <time> <filename>\n\n";
         return 0;
     }
 
@@ -486,71 +451,106 @@ int main(int argc, char** argv)
 
     CreateMPIDatatype(); 
 
-    std::string filename = "data/init.dat";
+    std::string filename = argv[2];
     readNbodyData((char*)filename.c_str(), universe, bodies, forces);
 
-    //MPI_Bcast body pointer array
-    //MPI_Bcast(bodies, NBODIES, MPI_Body, 0, MPI_COMM_WORLD);
-    //CHECKMPI(err); 
-
-    for(t=0; t<TIME; ++t)
-    {
-        root = (Node*)calloc(1, sizeof( Node ));
-        cout<<"Bodies\n";
-        printBodies(bodies, t);
-        cout<<"\n\n";
-
-        cout<<"Universe\n";
-        printUniverse(universe, t);
-        cout<<"\n\n";
-
-        // Compute diameter and center of universe
-        ComputeDTC(universe, center, diameter);
-        // Set root node
-        initNodes(root);
-        radius = diameter * 0.5;
-  
-        // Set root to center of universe  
-        for(j=0; j<3; j++)
-            root->position[j] = center[j];
-	
-        // Build Octree
-        for (j = 0; j < NBODIES; ++j) 
-			insert(root, universe[j], radius); 
-	  cout<<"Tree\n";
-        printTree(root,0);
-        cout<<"\n\n";
-  
-        // Compute center of mass of the universe
-        ComputeCOM(&(*root));
-
-        cout<<"Universe after build\n";
-        printUniverse(universe, t);
-        cout<<"\n\n";
-
-        // Force routines
-        for (i = 0; i < NBODIES; ++i) 
-	       ComputeForce(&(*root), &(*universe[i]), &(forces[i]), diameter*diameter);
-        
-        //MPI_Allgather body pointer array
-        //MPI_Allgather(bodies, NBODIES, MPI_Body, bodies, NBODIES, MPI_Body, MPI_COMM_WORLD);
-
-        cout<<"Universe\n";
-        printUniverse(universe, t);
-        cout<<"\n\n";
-
-        for (i = 0; i < NBODIES; ++i) 
-           Leapfrog(&(*universe[i]), &(forces[i]));
-          
-    }
-
+    int local_bodies = NBODIES / numprocs; 
 
     if(rank == 0)
     {
+        // MPI_Bcast body data
+        err = MPI_Bcast(bodies, NBODIES, MPI_Body, 0, MPI_COMM_WORLD);
+        CHECKMPI(err); 
+
+        for(t=0; t<TIME; ++t)
+        {
+            root = (Node*)calloc(1, sizeof( Node ));
+            cout<<"Bodies\n";
+            printBodies(bodies, t);
+            cout<<"\n\n";
+
+            // Compute diameter and center of universe
+            ComputeDTC(universe, center, diameter);
+            // Set root node
+            initNodes(root);
+            radius = diameter * 0.5;
+      
+            // Set root to center of universe  
+            for(j=0; j<3; j++)
+                root->position[j] = center[j];
+        
+            // Build Octree
+            for (j = 0; j < NBODIES; ++j) 
+                insert(root, universe[j], radius); 
+      
+            // Compute center of mass of the universe
+            ComputeCOM(&(*root));
+
+            // Force routines
+            for (i = 0; i < local_bodies; ++i) 
+               ComputeForce(&(*root), &(*universe[i]), &(forces[i]), diameter*diameter);
+            
+            //MPI_Allgather body pointer array
+            err = MPI_Allgather(bodies, local_bodies, MPI_Body, bodies, local_bodies, MPI_Body, MPI_COMM_WORLD);
+            CHECKMPI(err);
+
+            for (i = 0; i < NBODIES; ++i) 
+               Leapfrog(&(*universe[i]), &(forces[i]));
+        }
+
         stopclock = std::chrono::high_resolution_clock::now();
         time_span = std::chrono::duration_cast<std::chrono::duration<double>>(stopclock - startclock);
 
-        //printf("\n %d %d %f\n",numprocs, N, (double)time_span.count());
+        printf("\n %d %d %f\n", numprocs, NBODIES, (double)time_span.count());
+    }
+
+    else if (rank != 0)
+    {
+        int start = 1 + (rank * local_bodies);
+        int stop = start + local_bodies;
+
+        // Get Body data
+        err = MPI_Bcast(bodies, NBODIES, MPI_Body, 0, MPI_COMM_WORLD);
+        CHECKMPI(err); 
+
+
+        for(t=0; t<TIME; ++t)
+        {
+            root = (Node*)calloc(1, sizeof( Node ));
+            cout<<"Bodies\n";
+            printBodies(bodies, t);
+            cout<<"\n\n";
+
+            // Compute diameter and center of universe
+            ComputeDTC(universe, center, diameter);
+            // Set root node
+            initNodes(root);
+            radius = diameter * 0.5;
+      
+            // Set root to center of universe  
+            for(j=0; j<3; j++)
+                root->position[j] = center[j];
+        
+            // Build Octree
+            for (j = 0; j < NBODIES; ++j) 
+            {
+                insert(root, universe[j], radius); 
+            }
+      
+            // Compute center of mass of the universe
+            ComputeCOM(&(*root));
+
+            // Force routines
+            for (i = start; i < stop; ++i) 
+               ComputeForce(&(*root), &(*universe[i]), &(forces[i]), diameter*diameter);
+            
+            //MPI_Allgather body pointer array
+            err = MPI_Allgather(&bodies[start], stop - start, MPI_Body, bodies, start - stop, MPI_Body, MPI_COMM_WORLD);
+            CHECKMPI(err);
+
+            for (i = 0; i < NBODIES; ++i) 
+               Leapfrog(&(*universe[i]), &(forces[i]));
+        }
     }
 
     MPI_Finalize();
